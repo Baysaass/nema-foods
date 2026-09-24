@@ -87,7 +87,7 @@ export function AdminLogin({ onLoginSuccess, catalogUrl }: AdminLoginProps) {
                 className="object-contain p-1"
               />
             </div>
-            
+
             <div className="inline-flex items-center gap-1.5 rounded-[8px] bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900 mb-2">
               <ShieldCheck className="size-3.5 text-[#DE3B28]" />
               <span>Админ Удирдлагын Систем</span>
@@ -196,26 +196,6 @@ export function AdminLogin({ onLoginSuccess, catalogUrl }: AdminLoginProps) {
             </button>
           </form>
 
-          {/* Credentials Info Box */}
-          <div className="mt-6 rounded-[8px] bg-slate-50 border border-slate-200/80 p-3 text-[11px] text-slate-600">
-            <div className="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-              <ShieldCheck className="size-3.5 text-emerald-600" />
-              <span>Админ нэвтрэх анхны мэдээлэл:</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-1.5 font-mono text-[11px] bg-white rounded-[6px] p-2 border border-slate-200">
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-sans">Нэвтрэх нэр</span>
-                <span className="text-slate-900 font-bold">admin</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-sans">Нууц үг</span>
-                <span className="text-[#DE3B28] font-bold">nema2026</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">
-              (Та хүсвэл .env.local эсвэл Vercel Environment Variables дээр NEXT_PUBLIC_ADMIN_USERNAME, NEXT_PUBLIC_ADMIN_PASSWORD-оор сольж болно)
-            </p>
-          </div>
 
           {/* Back to Catalog */}
           <div className="mt-5 text-center">

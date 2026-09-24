@@ -157,18 +157,6 @@ export default function AdminPage() {
     } catch (e) {}
   }, [settings, isLoaded, isAuthenticated])
 
-  const handleResetData = () => {
-    if (confirm('Та анхны бодит Монгол бүтээгдэхүүний өгөгдлийг дахин сэргээхдээ итгэлтэй байна уу?')) {
-      setProducts(initialProducts)
-      setCategories(initialCategories)
-      setSettings({ showStockCount: true })
-      try {
-        localStorage.removeItem('catalog_pro_products_v2')
-        localStorage.removeItem('catalog_pro_categories_v2')
-        localStorage.removeItem('catalog_pro_settings_v2')
-      } catch (e) {}
-    }
-  }
 
   const handleBackToCatalog = () => {
     const catalogUrl = process.env.NEXT_PUBLIC_CATALOG_URL
@@ -236,7 +224,6 @@ export default function AdminPage() {
       isSupabaseConnected={isSupabaseConnected}
       onRefreshFromSupabase={loadInitialData}
       onCatalog={handleBackToCatalog}
-      onResetData={handleResetData}
       isSubdomain={isSubdomainMode}
       onLogout={handleLogout}
     />

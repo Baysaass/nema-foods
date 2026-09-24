@@ -21,7 +21,6 @@ import {
   Database,
   RefreshCw,
   ExternalLink,
-  RotateCcw,
   Globe,
   LogOut,
 } from 'lucide-react'
@@ -740,7 +739,6 @@ export function AdminView({
   isSupabaseConnected,
   onRefreshFromSupabase,
   onCatalog,
-  onResetData,
   isSubdomain = false,
   onLogout,
 }: {
@@ -753,7 +751,6 @@ export function AdminView({
   isSupabaseConnected: boolean
   onRefreshFromSupabase: () => void
   onCatalog: () => void
-  onResetData: () => void
   isSubdomain?: boolean
   onLogout?: () => void
 }) {
@@ -824,13 +821,19 @@ export function AdminView({
     }
   }
 
-  // --- DELETE PRODUCT HANDLER (Requested by user) ---
+  // --- DELETE PRODUCT HANDLER ---
   const handleDeleteProduct = async (id: number, name: string) => {
-    if (confirm(`"${name}" барааг каталогоос бүрмөсөн устгахдаа итгэлтэй байна уу?`)) {
-      setProducts((prev) => prev.filter((p) => p.id !== id))
-      showSyncNotification(`✓ "${name}" барааг амжилттай устгалаа.`)
-      if (isSupabaseConnected) {
-        await deleteProductFromSupabase(id)
+    if (!confirm(`"${name}" барааг каталогоос бүрмөсөн устгахдаа итгэлтэй байна уу?`)) return
+
+    // Optimistic local removal
+    setProducts((prev) => prev.filter((p) => p.id !== id))
+    showSyncNotification(`✓ "${name}" барааг амжилттай устгалаа.`)
+
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      const ok = await deleteProductFromSupabase(id)
+      if (!ok) {
+        showSyncNotification(`⚠️ Supabase-д устгахад алдаа гарлаа.`)
       }
     }
   }
@@ -964,14 +967,7 @@ export function AdminView({
               <span>Өгөгдлийн сан</span>
             </button>
 
-            <button
-              onClick={onResetData}
-              title="Анхны өгөгдлийг сэргээх"
-              className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              <RotateCcw className="size-3.5" />
-              <span className="hidden sm:inline">Өгөгдөл сэргээх</span>
-            </button>
+
             <button
               onClick={handleBackToCatalog}
               className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] border border-amber-400/60 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-colors"

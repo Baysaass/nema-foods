@@ -201,8 +201,11 @@ export async function saveProductToSupabase(product: Product): Promise<Product |
   const row = mapProductToRow(product)
 
   try {
-    // If it's an existing numeric ID that exists in DB, update
-    if (product.id && product.id < 1000000000000) {
+    // For existing products (id < 1e12 means it's a real DB id, not a Date.now() temp id)
+    const isExistingId = product.id && product.id < 1_000_000_000_000
+
+    if (isExistingId) {
+      // Try update first
       const { data, error } = await client
         .from('products')
         .update(row)
@@ -210,31 +213,31 @@ export async function saveProductToSupabase(product: Product): Promise<Product |
         .select()
         .single()
 
-      if (error) {
-        // If not found, fall back to upsert
-        const { data: upsertData, error: upsertErr } = await client
-          .from('products')
-          .upsert({ ...row, id: product.id })
-          .select()
-          .single()
-
-        if (upsertErr) throw upsertErr
-        return mapRowToProduct(upsertData as ProductRow)
+      if (!error && data) {
+        return mapRowToProduct(data as ProductRow)
       }
+    }
 
-      return mapRowToProduct(data as ProductRow)
-    } else {
-      // New item insert (omit id so Postgres identity sequence increments)
-      const { id, ...newRow } = row
-      const { data, error } = await client
+    // Insert new (omit id so Postgres auto-increments)
+    const { id: _omit, ...newRow } = row
+    const { data: insertData, error: insertErr } = await client
+      .from('products')
+      .insert(newRow)
+      .select()
+      .single()
+
+    if (insertErr) {
+      // Last resort: upsert by SKU
+      const { data: upsertData, error: upsertErr } = await client
         .from('products')
-        .insert(newRow)
+        .upsert({ ...newRow }, { onConflict: 'sku' })
         .select()
         .single()
-
-      if (error) throw error
-      return mapRowToProduct(data as ProductRow)
+      if (upsertErr) throw upsertErr
+      return mapRowToProduct(upsertData as ProductRow)
     }
+
+    return mapRowToProduct(insertData as ProductRow)
   } catch (e) {
     console.error('Error saving product to Supabase:', e)
     return null
@@ -281,11 +284,21 @@ export async function deleteProductFromSupabase(id: number): Promise<boolean> {
   if (!client) return false
 
   try {
-    const { error } = await client.from('products').delete().eq('id', id)
+    const { error, count } = await client
+      .from('products')
+      .delete({ count: 'exact' })
+      .eq('id', id)
+
     if (error) {
       console.error('Failed to delete product from Supabase:', error.message)
       return false
     }
+
+    // count === 0 means no row matched that id (maybe id was a temp Date.now() value)
+    if (count === 0) {
+      console.warn(`deleteProductFromSupabase: no row with id=${id} found in DB (may have been a local-only product)`)
+    }
+
     return true
   } catch (e) {
     console.error('Exception deleting from Supabase:', e)
