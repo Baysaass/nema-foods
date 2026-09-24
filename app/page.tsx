@@ -3533,7 +3533,7 @@ function CatalogView({
   products: Product[]
   categories: string[]
   settings: CatalogSettings
-  onAdmin: () => void
+  onAdmin?: () => void
   onPdf: () => void
   onFlipBook: () => void
 }) {
@@ -3636,22 +3636,6 @@ function CatalogView({
             >
               <FileText className="size-4 text-[#DE3B28] shrink-0" />
               <span className="hidden sm:inline">Хэвлэх /</span> <span>PDF</span>
-            </button>
-
-            <button
-              onClick={() => {
-                const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL
-                if (adminUrl && typeof window !== 'undefined') {
-                  window.location.href = adminUrl
-                  return
-                }
-                onAdmin()
-              }}
-              title="Админ удирдлага"
-              className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] bg-slate-900 px-2.5 sm:px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#DE3B28] transition-all"
-            >
-              <Boxes className="size-4 shrink-0" />
-              <span className="hidden sm:inline">Админ</span>
             </button>
           </div>
         </div>
@@ -3964,20 +3948,6 @@ function CatalogView({
             <span className="text-slate-300">•</span>
             <button onClick={onPdf} className="hover:text-[#DE3B28] cursor-pointer transition-colors">
               PDF каталог
-            </button>
-            <span className="text-slate-300">•</span>
-            <button
-              onClick={() => {
-                const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL
-                if (adminUrl && typeof window !== 'undefined') {
-                  window.location.href = adminUrl
-                  return
-                }
-                onAdmin()
-              }}
-              className="hover:text-[#DE3B28] cursor-pointer transition-colors"
-            >
-              Админ систем
             </button>
           </div>
 

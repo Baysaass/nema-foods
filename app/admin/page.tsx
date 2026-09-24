@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AdminView } from '@/components/AdminView'
+import { AdminLogin } from '@/components/AdminLogin'
 import {
   Product,
   CatalogSettings,
@@ -21,6 +22,7 @@ import {
 
 export default function AdminPage() {
   const router = useRouter()
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<string[]>(initialCategories)
   const [settings, setSettings] = useState<CatalogSettings>({ showStockCount: true })
@@ -28,6 +30,25 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isLoaded, setIsLoaded] = useState<boolean>(false)
   const [isSubdomainMode, setIsSubdomainMode] = useState<boolean>(false)
+
+  // 1. Check Authentication on Mount
+  useEffect(() => {
+    try {
+      const localAuth = localStorage.getItem('nema_admin_auth')
+      const sessionAuth = sessionStorage.getItem('nema_admin_auth')
+      const raw = localAuth || sessionAuth
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && parsed.authenticated) {
+          setIsAuthenticated(true)
+          return
+        }
+      }
+    } catch (e) {
+      console.warn('Auth check error:', e)
+    }
+    setIsAuthenticated(false)
+  }, [])
 
   // Detect if accessing via subdomain
   useEffect(() => {
@@ -39,7 +60,7 @@ export default function AdminPage() {
     }
   }, [])
 
-  // 1. Initial Load: Check Supabase, fallback to localStorage
+  // 2. Initial Data Load: Check Supabase, fallback to localStorage
   const loadInitialData = async () => {
     setIsLoading(true)
 
@@ -109,30 +130,32 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    if (isAuthenticated) {
+      loadInitialData()
+    }
+  }, [isAuthenticated])
 
   // Sync to local cache on changes
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || !isAuthenticated) return
     try {
       localStorage.setItem('catalog_pro_products_v2', JSON.stringify(products))
     } catch (e) {}
-  }, [products, isLoaded])
+  }, [products, isLoaded, isAuthenticated])
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || !isAuthenticated) return
     try {
       localStorage.setItem('catalog_pro_categories_v2', JSON.stringify(categories))
     } catch (e) {}
-  }, [categories, isLoaded])
+  }, [categories, isLoaded, isAuthenticated])
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || !isAuthenticated) return
     try {
       localStorage.setItem('catalog_pro_settings_v2', JSON.stringify(settings))
     } catch (e) {}
-  }, [settings, isLoaded])
+  }, [settings, isLoaded, isAuthenticated])
 
   const handleResetData = () => {
     if (confirm('Та анхны бодит Монгол бүтээгдэхүүний өгөгдлийг дахин сэргээхдээ итгэлтэй байна уу?')) {
@@ -156,12 +179,47 @@ export default function AdminPage() {
     router.push('/')
   }
 
+  const handleLogout = () => {
+    if (confirm('Та админ удирдлагын системээс гарахдаа итгэлтэй байна уу?')) {
+      try {
+        localStorage.removeItem('nema_admin_auth')
+        sessionStorage.removeItem('nema_admin_auth')
+      } catch (e) {}
+      setIsAuthenticated(false)
+    }
+  }
+
+  // Still verifying auth status from storage
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-[#F7F5EE] flex flex-col items-center justify-center p-4">
+        <div className="size-10 border-4 border-[#DE3B28] border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-bold text-slate-800">
+          НЕМА ФҮҮДС Админ системийг ачаалж байна...
+        </p>
+      </div>
+    )
+  }
+
+  // Not authenticated -> show Login Screen
+  if (!isAuthenticated) {
+    return (
+      <AdminLogin
+        onLoginSuccess={() => {
+          setIsAuthenticated(true)
+        }}
+        catalogUrl={process.env.NEXT_PUBLIC_CATALOG_URL || 'https://nemafoods.online'}
+      />
+    )
+  }
+
+  // Authenticated and loading catalog data
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
         <div className="size-10 border-4 border-[#DE3B28] border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-sm font-bold text-slate-800">
-          НЕМА ФҮҮДС Админ системийг ачаалж байна...
+          НЕМА ФҮҮДС Бараа бүтээгдэхүүний өгөгдлийг ачаалж байна...
         </p>
       </div>
     )
@@ -180,6 +238,7 @@ export default function AdminPage() {
       onCatalog={handleBackToCatalog}
       onResetData={handleResetData}
       isSubdomain={isSubdomainMode}
+      onLogout={handleLogout}
     />
   )
 }

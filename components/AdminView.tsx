@@ -23,6 +23,7 @@ import {
   ExternalLink,
   RotateCcw,
   Globe,
+  LogOut,
 } from 'lucide-react'
 import {
   Product,
@@ -741,6 +742,7 @@ export function AdminView({
   onCatalog,
   onResetData,
   isSubdomain = false,
+  onLogout,
 }: {
   products: Product[]
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>
@@ -753,6 +755,7 @@ export function AdminView({
   onCatalog: () => void
   onResetData: () => void
   isSubdomain?: boolean
+  onLogout?: () => void
 }) {
   const [editing, setEditing] = useState<Product | null>(null)
   const [adminViewMode, setAdminViewMode] = useState<'cards' | 'table'>('cards')
@@ -976,6 +979,16 @@ export function AdminView({
               <ChevronLeft className="size-4" />
               <span>Каталог харах</span>
             </button>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Админ системээс гарах"
+                className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors"
+              >
+                <LogOut className="size-4" />
+                <span className="hidden sm:inline">Гарах</span>
+              </button>
+            )}
             <button
               onClick={() =>
                 setEditing({
