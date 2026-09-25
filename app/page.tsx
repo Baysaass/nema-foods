@@ -105,6 +105,22 @@ export type Product = {
 
 export type CatalogSettings = {
   showStockCount: boolean // Үлдэгдлийн тоо ширхгийг нийтэд харуулах эсэх
+  phone?: string // Холбогдох утас (жишээ: "7711-2233, 9911-0000")
+  secondaryPhone?: string // Нэмэлт утас
+  email?: string // Холбогдох Gmail / И-мэйл
+  address?: string // Хаяг байршил
+  workingHours?: string // Ажлын цаг
+  bankAccounts?: string // Банк данс
+}
+
+const defaultSettings: CatalogSettings = {
+  showStockCount: false,
+  phone: '7711-2233, 9911-0000',
+  secondaryPhone: '9911-0000',
+  email: 'sales@nemafoods.mn',
+  address: 'Улаанбаатар хот, Сүхбаатар дүүрэг, 1-р хороо',
+  workingHours: 'Даваа - Баасан: 09:00 - 18:00',
+  bankAccounts: 'Хаан Банк: 5000 1234 5678, Голомт Банк: 1100 9876 5432',
 }
 
 // --- Status Helpers ---
@@ -691,10 +707,12 @@ function ProductVisual({
 function ProductDetailModal({
   product,
   showStockCount = true,
+  settings = defaultSettings,
   onClose,
 }: {
   product: Product
   showStockCount?: boolean
+  settings?: CatalogSettings
   onClose: () => void
 }) {
   const status = getProductStatus(product)
@@ -826,12 +844,18 @@ function ProductDetailModal({
             </div>
             <div className="text-[11px] text-slate-700 flex items-center gap-2">
               <Phone className="size-3.5 text-[#DE3B28]" />
-              <span>Утас: 7711-2233, 9911-0000</span>
+              <span>Утас: {settings.phone || '7711-2233, 9911-0000'}</span>
             </div>
             <div className="text-[11px] text-slate-700 flex items-center gap-2">
               <Mail className="size-3.5 text-[#DE3B28]" />
-              <span>И-мэйл: sales@nemafoods.mn</span>
+              <span>И-мэйл: {settings.email || 'sales@nemafoods.mn'}</span>
             </div>
+            {settings.address && (
+              <div className="text-[11px] text-slate-700 flex items-center gap-2">
+                <MapPin className="size-3.5 text-[#DE3B28]" />
+                <span>Хаяг: {settings.address}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1288,12 +1312,14 @@ function PdfCatalogView({
   categories,
   activeCategory,
   showStockCount = true,
+  settings = defaultSettings,
   onBack,
 }: {
   products: Product[]
   categories: string[]
   activeCategory: string
   showStockCount?: boolean
+  settings?: CatalogSettings
   onBack: () => void
 }) {
   const [selectedScope, setSelectedScope] = useState<string>('all')
@@ -1687,7 +1713,7 @@ function PdfCatalogView({
                     </div>
                     <div className="text-right">
                       <span className="text-[#FFCE00] font-bold">www.nemafoods.mn</span>
-                      <p className="text-[10px] text-white/80 mt-0.5">sales@nemafoods.mn | 7711-2233</p>
+                      <p className="text-[10px] text-white/80 mt-0.5">{settings.email || 'sales@nemafoods.mn'} | {settings.phone ? settings.phone.split(',')[0].trim() : '7711-2233'}</p>
                     </div>
                   </div>
                 </div>
@@ -1887,7 +1913,7 @@ function PdfCatalogView({
                     <span className="font-mono font-bold text-slate-700">
                       Хуудас {page.pageNum.toString().padStart(2, '0')} / {totalPages.toString().padStart(2, '0')}
                     </span>
-                    <span>sales@nemafoods.mn | 7711-2233</span>
+                    <span>{settings.email || 'sales@nemafoods.mn'} | {settings.phone ? settings.phone.split(',')[0].trim() : '7711-2233'}</span>
                   </div>
                 </div>
               )}
@@ -1965,7 +1991,7 @@ function PdfCatalogView({
                         <div>
                           <b className="text-slate-900">Төв оффис & Шоурүүм:</b>
                           <p className="text-slate-500 text-[11px] mt-0.5">
-                            Монгол Улс, Улаанбаатар хот, Нема Фүүдс төв байр
+                            {settings.address || 'Монгол Улс, Улаанбаатар хот, Нема Фүүдс төв байр'}
                           </p>
                         </div>
                       </div>
@@ -1974,7 +2000,7 @@ function PdfCatalogView({
                         <div>
                           <b className="text-slate-900">Лавлах утас:</b>
                           <p className="text-slate-500 text-[11px] mt-0.5">
-                            7711-2233, 9911-0000 | Ажлын өдрүүдэд: 09:00 - 18:00
+                            {settings.phone || '7711-2233, 9911-0000'} | {settings.workingHours || 'Ажлын өдрүүдэд: 09:00 - 18:00'}
                           </p>
                         </div>
                       </div>
@@ -3909,14 +3935,14 @@ function CatalogView({
           </div>
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <a
-              href="tel:+97677112233"
+              href={`tel:${(settings.phone ? settings.phone.split(',')[0].trim() : '77112233').replace(/[^0-9+]/g, '')}`}
               className="cursor-pointer min-h-[44px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-[8px] bg-slate-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-[#DE3B28] transition-colors"
             >
               <Phone className="size-3.5" />
-              <span>7711-2233</span>
+              <span>{settings.phone ? settings.phone.split(',')[0].trim() : '7711-2233'}</span>
             </a>
             <a
-              href="mailto:sales@nemafoods.mn"
+              href={`mailto:${settings.email || 'sales@nemafoods.mn'}`}
               className="cursor-pointer min-h-[44px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-[8px] border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-[#DE3B28] hover:border-amber-300 transition-colors"
             >
               <Mail className="size-3.5" />
@@ -3968,6 +3994,7 @@ function CatalogView({
         <ProductDetailModal
           product={selectedProduct}
           showStockCount={settings.showStockCount}
+          settings={settings}
           onClose={() => setSelectedProduct(null)}
         />
       )}
@@ -3981,7 +4008,7 @@ export default function Page() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<string[]>(['Бүх ангилал'])
   const [currentMode, setCurrentMode] = useState<'catalog' | 'pdf' | 'admin' | 'flipbook'>('catalog')
-  const [settings, setSettings] = useState<CatalogSettings>({ showStockCount: true })
+  const [settings, setSettings] = useState<CatalogSettings>(defaultSettings)
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false)
   const [isLoadingFromSupabase, setIsLoadingFromSupabase] = useState<boolean>(true)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -4106,6 +4133,7 @@ export default function Page() {
         products={products}
         categories={categories}
         showStockCount={settings.showStockCount}
+        settings={settings}
         onBackToCatalog={() => setCurrentMode('catalog')}
       />
     )
@@ -4118,6 +4146,7 @@ export default function Page() {
         categories={categories}
         activeCategory="Бүх ангилал"
         showStockCount={settings.showStockCount}
+        settings={settings}
         onBack={() => setCurrentMode('catalog')}
       />
     )

@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { Product, ProductStatus, CatalogSettings } from '@/lib/types'
+import { Product, ProductStatus, CatalogSettings, defaultCatalogSettings } from '@/lib/types'
 
 // Database row interface matching PostgreSQL snake_case columns
 export interface ProductRow {
@@ -448,8 +448,11 @@ export async function fetchSettingsFromSupabase(): Promise<CatalogSettings | nul
       .eq('key', 'general')
       .maybeSingle()
 
-    if (error || !data) return null
-    return data.value as CatalogSettings
+    if (error || !data) return defaultCatalogSettings
+    return {
+      ...defaultCatalogSettings,
+      ...(data.value as Partial<CatalogSettings>),
+    }
   } catch (e) {
     console.error('Failed to fetch settings from Supabase:', e)
     return null

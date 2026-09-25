@@ -23,11 +23,15 @@ import {
   ExternalLink,
   Globe,
   LogOut,
+  Phone,
+  Mail,
+  MapPin,
 } from 'lucide-react'
 import {
   Product,
   ProductStatus,
   CatalogSettings,
+  defaultCatalogSettings,
   getProductStatus,
   normalizeProduct,
   formatMNT,
@@ -735,6 +739,202 @@ CREATE POLICY "Public Write" ON public.settings FOR ALL USING (true) WITH CHECK 
   )
 }
 
+// --- ХОЛБОО БАРИХ МЭДЭЭЛЭЛ & ТОХИРГОО ЗАSAX МОДАЛ ---
+export function CatalogSettingsModal({
+  settings,
+  onSave,
+  onClose,
+  isSupabaseConnected,
+}: {
+  settings: CatalogSettings
+  onSave: (s: CatalogSettings) => void
+  onClose: () => void
+  isSupabaseConnected: boolean
+}) {
+  const [formData, setFormData] = useState<CatalogSettings>({
+    ...defaultCatalogSettings,
+    ...settings,
+  })
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSaving(true)
+    onSave(formData)
+    setIsSaving(false)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="relative w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 my-8">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#DE3B28]/10 text-[#DE3B28]">
+              <SlidersHorizontal className="size-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Холбоо барих мэдээлэл & Тохиргоо</h3>
+              <p className="text-xs text-slate-500">
+                Каталог, FlipBook, захиалгад харагдах утас, Gmail, хаяг солих
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer size-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          {/* Phone Numbers */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1">
+                <Phone className="size-3.5 text-[#DE3B28]" />
+                <span>Үндсэн утасны дугаар *</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="Жишээ: 7711-2233, 9911-0000"
+                className="h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-amber-500 focus:outline-hidden"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1">
+                <Phone className="size-3.5 text-slate-500" />
+                <span>Нэмэлт утас</span>
+              </label>
+              <input
+                type="text"
+                value={formData.secondaryPhone || ''}
+                onChange={(e) => setFormData({ ...formData, secondaryPhone: e.target.value })}
+                placeholder="Жишээ: 9911-0000"
+                className="h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-amber-500 focus:outline-hidden"
+              />
+            </div>
+          </div>
+
+          {/* Email / Gmail */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1">
+              <Mail className="size-3.5 text-[#DE3B28]" />
+              <span>Холбогдох Gmail / И-мэйл хаяг *</span>
+            </label>
+            <input
+              type="email"
+              required
+              value={formData.email || ''}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="Жишээ: info.nemafoods@gmail.com эсвэл sales@nemafoods.mn"
+              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-amber-500 focus:outline-hidden"
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              Хэрэглэгчид каталог болон захиалгын хэсгээс шууд энэхүү хаягаар холбогдоно.
+            </p>
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1">
+              <MapPin className="size-3.5 text-[#DE3B28]" />
+              <span>Албан ёсны хаяг, байршил</span>
+            </label>
+            <input
+              type="text"
+              value={formData.address || ''}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              placeholder="Жишээ: Улаанбаатар хот, Баянзүрх дүүрэг, 1-р хороо"
+              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-amber-500 focus:outline-hidden"
+            />
+          </div>
+
+          {/* Working Hours */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-1 block">
+              Ажлын цагийн хуваарь
+            </label>
+            <input
+              type="text"
+              value={formData.workingHours || ''}
+              onChange={(e) => setFormData({ ...formData, workingHours: e.target.value })}
+              placeholder="Жишээ: Даваа - Баасан: 09:00 - 18:00"
+              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-amber-500 focus:outline-hidden"
+            />
+          </div>
+
+          {/* Bank details */}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-1 block">
+              Төлбөр хүлээн авах банкны данс (FlipBook болон захиалгад харагдана)
+            </label>
+            <textarea
+              rows={2}
+              value={formData.bankAccounts || ''}
+              onChange={(e) => setFormData({ ...formData, bankAccounts: e.target.value })}
+              placeholder="Жишээ: Хаан Банк: 5000 1234 5678 (Нема Фүүдс ХХК)"
+              className="w-full rounded-lg border border-slate-300 p-2.5 text-xs focus:border-amber-500 focus:outline-hidden"
+            />
+          </div>
+
+          {/* Stock Count Toggle */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-slate-900">Барааны үлдэгдлийн тоог ил харуулах</div>
+              <div className="text-[11px] text-slate-500">
+                {formData.showStockCount
+                  ? 'Каталог дээр "Нөөцөд: 150 ш" гэж тодорхой тоогоор харагдана'
+                  : 'Хэрэглэгчдэд зөвхөн "Бэлэн байгаа", "Түр дууссан" гэж харагдана'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, showStockCount: !formData.showStockCount })}
+              className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                formData.showStockCount
+                  ? 'bg-[#DE3B28] text-white shadow-2xs'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {formData.showStockCount ? 'Ил харуулах: АСААЛТТАЙ' : 'Нуух: ХААЛТТАЙ'}
+            </button>
+          </div>
+
+          {isSupabaseConnected && (
+            <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-medium">
+              <Check className="size-4 text-emerald-600" />
+              <span>Supabase өгөгдлийн сантай шууд холбогдож хадгалагдана</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Цуцлах
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="cursor-pointer rounded-lg bg-[#DE3B28] px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#b82a1a] transition-colors"
+            >
+              {isSaving ? 'Хадгалж байна...' : 'Өгөгдлийн санд хадгалах'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // --- АДМИН УДИРДЛАГЫН ХЭСЭГ (SUBDOMAIN CAPABLE, SUPABASE CLOUD SYNC & DELETION) ---
 export function AdminView({
   products,
@@ -764,6 +964,7 @@ export function AdminView({
   const [editing, setEditing] = useState<Product | null>(null)
   const [adminViewMode, setAdminViewMode] = useState<'cards' | 'table'>('cards')
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [newCat, setNewCat] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | ProductStatus>('all')
@@ -1044,6 +1245,16 @@ export function AdminView({
               <span>Өгөгдлийн сан</span>
             </button>
 
+            {/* Contact Settings Button */}
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-colors shadow-2xs"
+              title="Утас, Gmail, хаяг болон каталогийн тохиргоог солих"
+            >
+              <Phone className="size-3.5 text-[#DE3B28]" />
+              <span>Холбоо барих & Тохиргоо</span>
+            </button>
+
 
             <button
               onClick={handleBackToCatalog}
@@ -1091,51 +1302,71 @@ export function AdminView({
         </div>
       </header>
 
-      {/* Settings Card: Stock Count Visibility Toggle */}
+      {/* Settings Card: Contacts & Stock Count */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-5">
-        <div className="rounded-[8px] border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-orange-50/40 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="rounded-[8px] border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-orange-50/40 p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-[8px] bg-[#DE3B28] text-white shadow-xs">
-              <SlidersHorizontal className="size-5" />
+              <Phone className="size-5" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                Каталогийн Үлдэгдэл Харуулах Тохиргоо
-              </h3>
-              <p className="text-xs text-slate-600">
-                {settings.showStockCount
-                  ? 'Одоогоор хэрэглэгчдэд барааны тодорхой үлдэгдлийн тоо (жишээ: "Нөөцөд: 180 ш") харагдаж байна.'
-                  : 'Үлдэгдлийн тоо ширхгийг нуусан. Хэрэглэгчдэд зөвхөн "Бэлэн байгаа", "Түр дууссан", "Дууссан" гэж харагдана.'}
-              </p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  Холбоо барих мэдээлэл & Каталогийн тохиргоо
+                </h3>
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                  Өгөгдлийн сангаас
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                <span className="flex items-center gap-1 font-medium text-slate-900">
+                  <Phone className="size-3 text-[#DE3B28]" />
+                  {settings.phone || '7711-2233, 9911-0000'}
+                </span>
+                <span className="flex items-center gap-1 font-medium text-slate-900">
+                  <Mail className="size-3 text-[#DE3B28]" />
+                  {settings.email || 'sales@nemafoods.mn'}
+                </span>
+                {settings.address && (
+                  <span className="flex items-center gap-1 text-slate-500 hidden lg:inline-flex">
+                    <MapPin className="size-3 text-slate-400" />
+                    {settings.address}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              const updated = { ...settings, showStockCount: !settings.showStockCount }
-              setSettings(updated)
-              if (isSupabaseConnected) {
-                saveSettingsToSupabase(updated)
-              }
-            }}
-            className={`cursor-pointer min-h-[44px] inline-flex items-center gap-2 rounded-[8px] px-4 py-2 text-xs font-bold transition-all shadow-xs shrink-0 ${
-              settings.showStockCount
-                ? 'bg-[#DE3B28] text-white hover:bg-[#b82a1a]'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-            }`}
-          >
-            {settings.showStockCount ? (
-              <>
-                <Eye className="size-4" />
-                <span>Үлдэгдэл ил харуулах: АСААЛТТАЙ</span>
-              </>
-            ) : (
-              <>
-                <EyeOff className="size-4" />
-                <span>Үлдэгдлийг нуух: ХААЛТТАЙ</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const updated = { ...settings, showStockCount: !settings.showStockCount }
+                setSettings(updated)
+                if (isSupabaseConnected) {
+                  saveSettingsToSupabase(updated)
+                }
+              }}
+              title="Барааны тодорхой үлдэгдлийн тоог нуух / харуулах"
+              className={`cursor-pointer min-h-[40px] inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                settings.showStockCount
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-slate-100 text-slate-600 border border-slate-300'
+              }`}
+            >
+              {settings.showStockCount ? <Eye className="size-3.5 text-[#DE3B28]" /> : <EyeOff className="size-3.5 text-slate-400" />}
+              <span>{settings.showStockCount ? 'Үлдэгдэл ил' : 'Үлдэгдэл нуусан'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="cursor-pointer min-h-[40px] inline-flex items-center gap-1.5 rounded-[8px] bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#DE3B28] shadow-xs transition-colors"
+            >
+              <Pencil className="size-3.5" />
+              <span>Утас, Gmail солих</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -1667,6 +1898,27 @@ export function AdminView({
         initialProducts={initialProducts}
         initialCategories={initialCategories}
       />
+
+      {/* Catalog Settings & Contacts Modal */}
+      {isSettingsModalOpen && (
+        <CatalogSettingsModal
+          settings={settings}
+          isSupabaseConnected={isSupabaseConnected}
+          onClose={() => setIsSettingsModalOpen(false)}
+          onSave={async (newSettings) => {
+            setSettings(newSettings)
+            showSyncNotification('Тохиргоог хадгалж байна...')
+            if (isSupabaseConnected) {
+              const ok = await saveSettingsToSupabase(newSettings)
+              if (ok) {
+                showSyncNotification('✓ Холбоо барих мэдээлэл өгөгдлийн санд амжилттай хадгалагдлаа!')
+              } else {
+                showSyncNotification('⚠️ Өгөгдлийн санд хадгалахад алдаа гарлаа.')
+              }
+            }
+          }}
+        />
+      )}
     </main>
   )
 }

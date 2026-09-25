@@ -21,6 +21,22 @@ export type Product = {
 
 export type CatalogSettings = {
   showStockCount: boolean // Үлдэгдлийн тоо ширхгийг нийтэд харуулах эсэх
+  phone?: string // Холбогдох утас (жишээ: "7711-2233, 9911-0000")
+  secondaryPhone?: string // Нэмэлт утас
+  email?: string // Холбогдох Gmail / И-мэйл (жишээ: "sales@nemafoods.mn")
+  address?: string // Хаяг байршил
+  workingHours?: string // Ажлын цагийн хуваарь
+  bankAccounts?: string // Банк дансны мэдээлэл
+}
+
+export const defaultCatalogSettings: CatalogSettings = {
+  showStockCount: false,
+  phone: '7711-2233, 9911-0000',
+  secondaryPhone: '9911-0000',
+  email: 'sales@nemafoods.mn',
+  address: 'Улаанбаатар хот, Сүхбаатар дүүрэг, 1-р хороо',
+  workingHours: 'Даваа - Баасан: 09:00 - 18:00',
+  bankAccounts: 'Хаан Банк: 5000 1234 5678, Голомт Банк: 1100 9876 5432',
 }
 
 // --- Status Helpers ---

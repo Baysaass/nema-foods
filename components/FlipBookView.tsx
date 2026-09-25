@@ -21,6 +21,7 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { Product, formatMNT } from '@/app/page'
+import { CatalogSettings } from '@/lib/types'
 
 // Synthetic realistic Paper Turn Sound effect using Web Audio API
 function playPaperSound() {
@@ -133,11 +134,13 @@ export default function FlipBookView({
   products,
   categories,
   showStockCount = true,
+  settings,
   onBackToCatalog,
 }: {
   products: Product[]
   categories: string[]
   showStockCount?: boolean
+  settings?: CatalogSettings
   onBackToCatalog: () => void
 }) {
   const bookRef = useRef<HTMLDivElement>(null)
@@ -457,7 +460,7 @@ export default function FlipBookView({
                   Албан ёсны бүтээгдэхүүний сан
                 </div>
                 <p className="mt-1 text-[11px] text-teal-200/80 leading-tight">
-                  Бүх бараа албан ёсны чанарын баталгаатай. Лавлах утас: 7711-2233
+                  Бүх бараа албан ёсны чанарын баталгаатай. Лавлах утас: {settings?.phone ? settings.phone.split(',')[0].trim() : '7711-2233'}
                 </p>
               </div>
             </div>
@@ -542,22 +545,23 @@ export default function FlipBookView({
                 <div className="rounded-lg bg-slate-800/80 p-4 border border-slate-700 space-y-2.5">
                   <div className="flex items-center gap-2 font-semibold text-amber-300">
                     <Phone className="size-4" />
-                    <span>Утас: +976 7711-2233, 9911-0000</span>
+                    <span>Утас: {settings?.phone || '+976 7711-2233, 9911-0000'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
                     <Mail className="size-4 text-amber-400" />
-                    <span>И-мэйл: sales@nemafoods.mn</span>
+                    <span>И-мэйл: {settings?.email || 'sales@nemafoods.mn'}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <MapPin className="size-4 text-amber-400" />
-                    <span>Хаяг: Улаанбаатар хот, Сүхбаатар дүүрэг, 1-р хороо</span>
-                  </div>
+                  {settings?.address && (
+                    <div className="flex items-center gap-2 text-slate-300">
+                      <MapPin className="size-4 text-amber-400" />
+                      <span>Хаяг: {settings.address}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-lg bg-slate-800/60 p-4 border border-slate-700 space-y-1 text-slate-300 text-[11px]">
                   <div className="font-bold text-amber-400">Албан ёсны гэрээ & Төлбөр:</div>
-                  <p>Хаан Банк: <b>5000 1234 5678</b> (Нема Фүүдс ХХК)</p>
-                  <p>Голомт Банк: <b>1100 9876 5432</b> (Нема Фүүдс ХХК)</p>
+                  <p>{settings?.bankAccounts || 'Хаан Банк: 5000 1234 5678 (Нема Фүүдс ХХК)'}</p>
                   <p className="text-amber-200/70">Бүх үнэ НӨАТ багтсан болно.</p>
                 </div>
               </div>
