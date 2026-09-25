@@ -29,7 +29,6 @@ import {
   Phone,
   Mail,
   MapPin,
-  RotateCcw,
   Info,
   CheckCircle2,
   Utensils,
@@ -2761,7 +2760,6 @@ function AdminView({
   isSupabaseConnected,
   onRefreshFromSupabase,
   onCatalog,
-  onResetData,
 }: {
   products: Product[]
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>
@@ -2772,7 +2770,6 @@ function AdminView({
   isSupabaseConnected: boolean
   onRefreshFromSupabase: () => void
   onCatalog: () => void
-  onResetData: () => void
 }) {
   const [editing, setEditing] = useState<Product | null>(null)
   const [adminViewMode, setAdminViewMode] = useState<'cards' | 'table'>('cards')
@@ -2963,14 +2960,6 @@ function AdminView({
               <span>Өгөгдлийн сан</span>
             </button>
 
-            <button
-              onClick={onResetData}
-              title="Анхны өгөгдлийг сэргээх"
-              className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              <RotateCcw className="size-3.5" />
-              <span className="hidden sm:inline">Өгөгдөл сэргээх</span>
-            </button>
             <button
               onClick={onCatalog}
               className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] border border-amber-400/60 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-colors"
@@ -3970,15 +3959,15 @@ function CatalogView({
 
 // --- ҮНДСЭН ХУУДАС (ROOT COMPONENT WITH SUPABASE INTEGRATION) ---
 export default function Page() {
-  const [products, setProducts] = useState<Product[]>(initialProducts)
+  // Start with empty array — prevents 20 sample products flashing before real data loads
+  const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<string[]>(initialCategories)
   const [currentMode, setCurrentMode] = useState<'catalog' | 'pdf' | 'admin' | 'flipbook'>('catalog')
   const [settings, setSettings] = useState<CatalogSettings>({ showStockCount: true })
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false)
-  const [isLoadingFromSupabase, setIsLoadingFromSupabase] = useState<boolean>(false)
+  const [isLoadingFromSupabase, setIsLoadingFromSupabase] = useState<boolean>(true)
   const [isLoaded, setIsLoaded] = useState(false)
 
-  // 1. Initial Load: Check Supabase, fallback to localStorage
   const loadInitialData = async () => {
     setIsLoadingFromSupabase(true)
 
@@ -4004,8 +3993,14 @@ export default function Page() {
               const reloaded = await fetchProductsFromSupabase()
               if (reloaded && reloaded.length > 0) {
                 setProducts(reloaded)
+              } else {
+                // Seed failed — fall back to initial data
+                setProducts(initialProducts)
               }
             }
+          } else {
+            // Fetch returned null (RLS or other error) — use initial data
+            setProducts(initialProducts)
           }
 
           if (remoteCats && remoteCats.length > 0) {
@@ -4032,7 +4027,12 @@ export default function Page() {
         const parsed = JSON.parse(savedProducts)
         if (Array.isArray(parsed) && parsed.length > 0) {
           setProducts(parsed.map(normalizeProduct))
+        } else {
+          setProducts(initialProducts)
         }
+      } else {
+        // No localStorage, no Supabase → show initial sample data
+        setProducts(initialProducts)
       }
       const savedCats = localStorage.getItem('catalog_pro_categories_v2')
       if (savedCats) {
@@ -4044,6 +4044,7 @@ export default function Page() {
       }
     } catch (e) {
       console.error('LocalStorage load error:', e)
+      setProducts(initialProducts)
     }
 
     setIsLoadingFromSupabase(false)
@@ -4076,18 +4077,21 @@ export default function Page() {
     } catch (e) {}
   }, [settings, isLoaded])
 
-  // Reset to initial mock data
-  const handleResetData = () => {
-    if (confirm('Та анхны бодит Монгол бүтээгдэхүүний өгөгдлийг дахин сэргээхдээ итгэлтэй байна уу?')) {
-      setProducts(initialProducts)
-      setCategories(initialCategories)
-      setSettings({ showStockCount: true })
-      try {
-        localStorage.removeItem('catalog_pro_products_v2')
-        localStorage.removeItem('catalog_pro_categories_v2')
-        localStorage.removeItem('catalog_pro_settings_v2')
-      } catch (e) {}
-    }
+
+  // Show loading screen while fetching real data (prevents flash of sample products)
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-[#F7F5EE] flex flex-col items-center justify-center p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative size-10 overflow-hidden rounded-[8px] border border-amber-200 bg-white shadow-sm">
+            <img src="/nema-foods-logo.svg" alt="Нема Фүүдс" className="size-full object-contain p-1" />
+          </div>
+          <span className="text-base font-black text-slate-900 tracking-tight">НЕМА ФҮҮДС</span>
+        </div>
+        <div className="size-8 border-4 border-[#DE3B28] border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-slate-600">Бүтээгдэхүүний мэдээлэл ачаалж байна...</p>
+      </div>
+    )
   }
 
   if (currentMode === 'flipbook') {
@@ -4125,7 +4129,6 @@ export default function Page() {
         isSupabaseConnected={isSupabaseConnected}
         onRefreshFromSupabase={loadInitialData}
         onCatalog={() => setCurrentMode('catalog')}
-        onResetData={handleResetData}
       />
     )
   }
