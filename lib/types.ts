@@ -17,6 +17,57 @@ export type Product = {
   badge?: string // 'Онцлох', 'Бөөний үнэ', 'Шинэ', 'Шилдэг'
   color?: string
   image?: string // WebP форматтай зургийн Data URL
+  // Хайрцаг / Багц савалгааны тохиргоо
+  isBoxed?: boolean // Хайрцагтай бүтээгдэхүүн эсэх
+  boxSize?: number // 1 хайрцаг дахь ширхэгийн тоо (жишээ: 12, 24, 48)
+  boxPrice?: number // 1 хайрцагны үнэ (₮)
+}
+
+// --- Cart & Order Types ---
+export type CartPackaging = 'piece' | 'box'
+
+export type CartItem = {
+  productId: number
+  sku: string
+  name: string
+  image?: string
+  packaging: CartPackaging // 'piece' (ширхэгээр) | 'box' (хайрцгаар)
+  unit: string // 'ш', 'уут', 'хайрцаг'
+  boxSize?: number // if packaging === 'box', how many pieces inside
+  unitPrice: number // 1 ширхэг эсвэл 1 хайрцагны нэгж үнэ
+  quantity: number // ширхэгийн тоо эсвэл хайрцагны тоо
+  itemTotal: number // unitPrice * quantity
+}
+
+export type OrderStatus = 'pending' | 'confirmed' | 'delivered' | 'cancelled'
+
+export type OrderItem = {
+  productId: number
+  sku: string
+  name: string
+  image?: string
+  packaging: CartPackaging // 'piece' | 'box'
+  quantity: number
+  unitPrice: number
+  itemTotal: number
+  boxSize?: number
+  unit: string
+}
+
+export type Order = {
+  id: string // e.g. "NF-260925-102"
+  createdAt: string // ISO date string
+  organizationName: string // Байгууллага / Дэлгүүрийн нэр *
+  contactPhone: string // Холбогдох утас *
+  contactPerson?: string // Хариуцах хүн
+  email?: string // И-мэйл
+  address?: string // Хүргэлтийн хаяг
+  notes?: string // Захиалгын тэмдэглэл / хүсэлт
+  registerNumber?: string // РД
+  items: OrderItem[]
+  totalItems: number // Нийт тоо ширхэг
+  totalAmount: number // Нийт төлөх дүн (₮)
+  status: OrderStatus // 'pending' | 'confirmed' | 'delivered' | 'cancelled'
 }
 
 export type CatalogSettings = {
@@ -117,6 +168,43 @@ export function convertImageFileToWebP(file: File): Promise<string> {
   })
 }
 
+// Extract embedded box packaging info from description
+export function extractBoxInfoFromDescription(desc?: string | null): {
+  cleanDescription: string
+  isBoxed?: boolean
+  boxSize?: number
+  boxPrice?: number
+} {
+  if (!desc) return { cleanDescription: '' }
+  const match = desc.match(/<!--NEMA_BOX:(.*?)-->/)
+  if (!match) return { cleanDescription: desc }
+  try {
+    const parsed = JSON.parse(match[1])
+    const cleanDescription = desc.replace(/<!--NEMA_BOX:.*?-->/, '').trim()
+    return {
+      cleanDescription,
+      isBoxed: Boolean(parsed.isBoxed),
+      boxSize: parsed.boxSize ? Number(parsed.boxSize) : undefined,
+      boxPrice: parsed.boxPrice ? Number(parsed.boxPrice) : undefined,
+    }
+  } catch (e) {
+    return { cleanDescription: desc }
+  }
+}
+
+// Embed box packaging info into description without affecting display text
+export function embedBoxInfoIntoDescription(
+  desc: string | undefined | null,
+  isBoxed?: boolean,
+  boxSize?: number,
+  boxPrice?: number
+): string {
+  const clean = (desc || '').replace(/<!--NEMA_BOX:.*?-->/g, '').trim()
+  if (!isBoxed) return clean
+  const meta = JSON.stringify({ isBoxed: true, boxSize, boxPrice })
+  return `${clean ? clean + '\n' : ''}<!--NEMA_BOX:${meta}-->`
+}
+
 // Normalize products loaded from storage for seamless backward compatibility
 export function normalizeProduct(p: any): Product {
   const status: ProductStatus =
@@ -125,6 +213,30 @@ export function normalizeProduct(p: any): Product {
     p.hasBulkPrice !== undefined
       ? Boolean(p.hasBulkPrice)
       : Boolean(p.bulkPrice && p.bulkPrice < p.price)
+
+  // Extract box info from description or direct properties
+  const boxFromDesc = extractBoxInfoFromDescription(p.description)
+  const isBoxed =
+    p.isBoxed !== undefined
+      ? Boolean(p.isBoxed)
+      : p.is_boxed !== undefined
+      ? Boolean(p.is_boxed)
+      : Boolean(boxFromDesc.isBoxed)
+
+  const boxSize =
+    p.boxSize !== undefined && p.boxSize !== null
+      ? Number(p.boxSize)
+      : p.box_size !== undefined && p.box_size !== null
+      ? Number(p.box_size)
+      : boxFromDesc.boxSize
+
+  const boxPrice =
+    p.boxPrice !== undefined && p.boxPrice !== null
+      ? Number(p.boxPrice)
+      : p.box_price !== undefined && p.box_price !== null
+      ? Number(p.box_price)
+      : boxFromDesc.boxPrice
+
   return {
     ...p,
     status,
@@ -135,6 +247,10 @@ export function normalizeProduct(p: any): Product {
     bulkFrom: Number(p.bulkFrom) || 5,
     stockCount: Number(p.stockCount) || 0,
     image: p.image || undefined,
+    description: boxFromDesc.cleanDescription,
+    isBoxed,
+    boxSize: boxSize && boxSize > 0 ? boxSize : undefined,
+    boxPrice: boxPrice && boxPrice > 0 ? boxPrice : undefined,
   }
 }
 

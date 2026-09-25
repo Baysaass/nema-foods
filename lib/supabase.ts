@@ -1,5 +1,15 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { Product, ProductStatus, CatalogSettings, defaultCatalogSettings } from '@/lib/types'
+import {
+  Product,
+  ProductStatus,
+  CatalogSettings,
+  defaultCatalogSettings,
+  Order,
+  OrderItem,
+  OrderStatus,
+  extractBoxInfoFromDescription,
+  embedBoxInfoIntoDescription,
+} from '@/lib/types'
 
 // Database row interface matching PostgreSQL snake_case columns
 export interface ProductRow {
@@ -37,6 +47,8 @@ export interface SettingRow {
 // Convert DB snake_case row to frontend Product type
 export function mapRowToProduct(row: ProductRow): Product {
   const status: ProductStatus = row.status || 'in_stock'
+  const boxInfo = extractBoxInfoFromDescription(row.description)
+
   return {
     id: row.id || Date.now(),
     name: row.name,
@@ -50,16 +62,26 @@ export function mapRowToProduct(row: ProductRow): Product {
     status,
     inStock: status === 'in_stock',
     stockCount: Number(row.stock_count) || 0,
-    description: row.description || undefined,
+    description: boxInfo.cleanDescription || undefined,
     badge: row.badge || undefined,
     color: row.color || 'from-teal-400 to-emerald-600',
     image: row.image || undefined,
+    isBoxed: boxInfo.isBoxed,
+    boxSize: boxInfo.boxSize,
+    boxPrice: boxInfo.boxPrice,
   }
 }
 
 // Convert frontend Product type to DB snake_case row
 export function mapProductToRow(prod: Product): Partial<ProductRow> {
   const status: ProductStatus = prod.status || (prod.inStock === false ? 'out_of_stock' : 'in_stock')
+  const finalDesc = embedBoxInfoIntoDescription(
+    prod.description,
+    prod.isBoxed,
+    prod.boxSize,
+    prod.boxPrice
+  )
+
   const row: Partial<ProductRow> = {
     name: prod.name,
     sku: prod.sku,
@@ -71,7 +93,7 @@ export function mapProductToRow(prod: Product): Partial<ProductRow> {
     unit: prod.unit || 'ш',
     status,
     stock_count: prod.stockCount || 0,
-    description: prod.description || null,
+    description: finalDesc || null,
     badge: prod.badge || null,
     color: prod.color || 'from-teal-400 to-emerald-600',
     image: prod.image || null,
@@ -541,3 +563,243 @@ export async function seedInitialDataToSupabase(
     return { success: false, message: `Өгөгдөл оруулахад алдаа: ${e?.message || e}` }
   }
 }
+
+// ==========================================
+// --- B2B ORDERS MANAGEMENT FUNCTIONS ---
+// ==========================================
+
+// Fetch all orders from Supabase (or fallback to catalog_settings/localStorage)
+export async function fetchOrdersFromSupabase(): Promise<Order[] | null> {
+  const client = getSupabaseClient()
+  if (!client) {
+    // Read from localStorage cache
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('nema_orders_cache')
+        if (stored) return JSON.parse(stored)
+      } catch (e) {}
+    }
+    return []
+  }
+
+  try {
+    // 1. Try dedicated 'orders' table if user created it in SQL
+    const { data: directOrders, error: directErr } = await client
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (!directErr && directOrders && directOrders.length > 0) {
+      const mapped: Order[] = directOrders.map((r: any) => ({
+        id: r.order_code || r.id,
+        createdAt: r.created_at,
+        organizationName: r.organization_name || r.customer_name || 'Байгууллага',
+        contactPhone: r.contact_phone || r.phone || '',
+        contactPerson: r.contact_person || undefined,
+        email: r.email || undefined,
+        address: r.address || undefined,
+        notes: r.notes || undefined,
+        registerNumber: r.register_number || undefined,
+        items: r.items || [],
+        totalItems: Number(r.total_items) || (r.items ? r.items.length : 0),
+        totalAmount: Number(r.total_amount) || 0,
+        status: (r.status as OrderStatus) || 'pending',
+      }))
+      // Cache locally
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nema_orders_cache', JSON.stringify(mapped))
+      }
+      return mapped
+    }
+
+    // 2. Fallback to 'catalog_settings' where key = 'orders'
+    const { data: settingsRow, error: setErr } = await client
+      .from('catalog_settings')
+      .select('value')
+      .eq('key', 'orders')
+      .single()
+
+    if (!setErr && settingsRow && Array.isArray(settingsRow.value)) {
+      const orders = settingsRow.value as Order[]
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nema_orders_cache', JSON.stringify(orders))
+      }
+      return orders
+    }
+
+    // Fallback to local cache if DB empty
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('nema_orders_cache')
+      if (stored) return JSON.parse(stored)
+    }
+
+    return []
+  } catch (e) {
+    console.warn('Failed to fetch orders from Supabase:', e)
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('nema_orders_cache')
+        if (stored) return JSON.parse(stored)
+      } catch (err) {}
+    }
+    return []
+  }
+}
+
+// Save a new order to Supabase
+export async function saveOrderToSupabase(order: Order): Promise<boolean> {
+  const client = getSupabaseClient()
+
+  // Always save to localStorage immediately for instant UI feedback
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('nema_orders_cache') || '[]'
+      const list: Order[] = JSON.parse(stored)
+      const updated = [order, ...list.filter((o) => o.id !== order.id)]
+      localStorage.setItem('nema_orders_cache', JSON.stringify(updated))
+    } catch (e) {
+      console.warn('Failed to save order to localStorage:', e)
+    }
+  }
+
+  if (!client) return true // Stored in local cache
+
+  try {
+    // 1. Try dedicated table if available
+    const { error: directErr } = await client.from('orders').insert({
+      order_code: order.id,
+      organization_name: order.organizationName,
+      contact_phone: order.contactPhone,
+      contact_person: order.contactPerson,
+      email: order.email,
+      address: order.address,
+      notes: order.notes,
+      register_number: order.registerNumber,
+      items: order.items,
+      total_items: order.totalItems,
+      total_amount: order.totalAmount,
+      status: order.status,
+      created_at: order.createdAt,
+    })
+
+    if (!directErr) return true
+
+    // 2. Fallback to 'catalog_settings' key = 'orders'
+    const { data: settingsRow } = await client
+      .from('catalog_settings')
+      .select('value')
+      .eq('key', 'orders')
+      .single()
+
+    const existingOrders: Order[] =
+      settingsRow?.value && Array.isArray(settingsRow.value) ? settingsRow.value : []
+
+    const updatedOrders = [order, ...existingOrders.filter((o) => o.id !== order.id)]
+
+    const { error: upsertErr } = await client.from('catalog_settings').upsert({
+      key: 'orders',
+      value: updatedOrders,
+      updated_at: new Date().toISOString(),
+    })
+
+    if (upsertErr) {
+      console.error('Error saving order to catalog_settings:', upsertErr.message)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('Exception saving order to Supabase:', e)
+    return false
+  }
+}
+
+// Update order status (pending, confirmed, delivered, cancelled)
+export async function updateOrderStatusInSupabase(
+  orderId: string,
+  newStatus: OrderStatus
+): Promise<boolean> {
+  const client = getSupabaseClient()
+
+  // Update in localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('nema_orders_cache') || '[]'
+      const list: Order[] = JSON.parse(stored)
+      const updated = list.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+      localStorage.setItem('nema_orders_cache', JSON.stringify(updated))
+    } catch (e) {}
+  }
+
+  if (!client) return true
+
+  try {
+    // 1. Try direct table
+    const { error: directErr } = await client
+      .from('orders')
+      .update({ status: newStatus })
+      .eq('order_code', orderId)
+
+    if (!directErr) return true
+
+    // 2. Fallback to catalog_settings
+    const { data: settingsRow } = await client
+      .from('catalog_settings')
+      .select('value')
+      .eq('key', 'orders')
+      .single()
+
+    if (settingsRow && Array.isArray(settingsRow.value)) {
+      const updated = (settingsRow.value as Order[]).map((o) =>
+        o.id === orderId ? { ...o, status: newStatus } : o
+      )
+      await client.from('catalog_settings').upsert({
+        key: 'orders',
+        value: updated,
+        updated_at: new Date().toISOString(),
+      })
+    }
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// Delete order from Supabase
+export async function deleteOrderFromSupabase(orderId: string): Promise<boolean> {
+  const client = getSupabaseClient()
+
+  // Delete from localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('nema_orders_cache') || '[]'
+      const list: Order[] = JSON.parse(stored)
+      const updated = list.filter((o) => o.id !== orderId)
+      localStorage.setItem('nema_orders_cache', JSON.stringify(updated))
+    } catch (e) {}
+  }
+
+  if (!client) return true
+
+  try {
+    await client.from('orders').delete().eq('order_code', orderId)
+
+    const { data: settingsRow } = await client
+      .from('catalog_settings')
+      .select('value')
+      .eq('key', 'orders')
+      .single()
+
+    if (settingsRow && Array.isArray(settingsRow.value)) {
+      const updated = (settingsRow.value as Order[]).filter((o) => o.id !== orderId)
+      await client.from('catalog_settings').upsert({
+        key: 'orders',
+        value: updated,
+        updated_at: new Date().toISOString(),
+      })
+    }
+    return true
+  } catch (e) {
+    return false
+  }
+}
+

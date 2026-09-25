@@ -26,6 +26,8 @@ import {
   Phone,
   Mail,
   MapPin,
+  Package,
+  ShoppingBag,
 } from 'lucide-react'
 import {
   Product,
@@ -38,6 +40,8 @@ import {
   convertImageFileToWebP,
   initialProducts,
   initialCategories,
+  Order,
+  OrderStatus,
 } from '@/lib/types'
 import {
   getSupabaseCredentials,
@@ -50,7 +54,9 @@ import {
   saveSettingsToSupabase,
   seedInitialDataToSupabase,
   testSupabaseConnection,
+  fetchOrdersFromSupabase,
 } from '@/lib/supabase'
+import { AdminOrdersView } from '@/components/AdminOrdersView'
 
 // --- БАРАА НЭМЭХ / ЗАСАХ МОДАЛ (WebP Image & Delete support) ---
 export function ProductEditModal({
@@ -121,6 +127,17 @@ export function ProductEditModal({
       }
       if (formData.bulkPrice > formData.price) {
         setError('Бөөний үнэ нь жижиглэнгийн үнээс бага байх ёстой!')
+        return
+      }
+    }
+
+    if (formData.isBoxed) {
+      if (!formData.boxSize || formData.boxSize <= 0) {
+        setError('Хайрцаг дахь ширхэгийн тоог оруулна уу!')
+        return
+      }
+      if (!formData.boxPrice || formData.boxPrice <= 0) {
+        setError('1 хайрцагны үнийг оруулна уу!')
         return
       }
     }
@@ -370,6 +387,142 @@ export function ProductEditModal({
                     {formData.bulkFrom}+ {formData.unit} авбал бөөний үнээр
                   </span>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Box / Case Packaging Section (Requested by user) */}
+          <div className="rounded-[8px] border border-blue-200 bg-blue-50/40 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Package className="size-4 text-blue-600" />
+                <span className="text-xs font-bold text-slate-900">
+                  Хайрцаг / Багц савалгааны тохиргоо
+                </span>
+              </div>
+              <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold text-blue-900">
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.isBoxed)}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setFormData({
+                      ...formData,
+                      isBoxed: checked,
+                      boxSize: checked ? (formData.boxSize || 12) : undefined,
+                      boxPrice: checked
+                        ? (formData.boxPrice || (formData.price * (formData.boxSize || 12)))
+                        : undefined,
+                    })
+                  }}
+                  className="cursor-pointer size-4 accent-blue-600 rounded-[4px]"
+                />
+                <span>Хайрцагтай бүтээгдэхүүн</span>
+              </label>
+            </div>
+
+            {formData.isBoxed && (
+              <div className="border-t border-blue-200/60 pt-3 space-y-3 animate-in fade-in duration-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Хайрцаг дахь ширхэгийн тоо (ш) *
+                    </label>
+                    <input
+                      type="number"
+                      min="2"
+                      value={formData.boxSize || ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          boxSize: Number(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="Жишээ: 12, 24, 48"
+                      className="h-10 w-full rounded-[8px] border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 focus:border-blue-500 focus:outline-hidden"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      1 хайрцагт {formData.boxSize || 0} {formData.unit || 'ш'} орно
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      1 хайрцагны үнэ (₮) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.boxPrice || ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          boxPrice: Number(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="Жишээ: 54000"
+                      className="h-10 w-full rounded-[8px] border border-slate-300 bg-white px-3 text-sm font-bold text-blue-900 focus:border-blue-500 focus:outline-hidden"
+                    />
+                    <span className="text-[10px] text-blue-700 font-mono mt-0.5 block">
+                      {formatMNT(formData.boxPrice || 0)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Auto calculation helper */}
+                {formData.boxSize && formData.boxSize > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-[6px] bg-white p-2.5 border border-blue-200/80 text-xs">
+                    <div className="text-[11px] text-slate-600">
+                      {formData.boxPrice && formData.boxPrice > 0 ? (
+                        <span>
+                          Хайрцгаар авбал 1 ширхэг нь:{' '}
+                          <b className="text-blue-700">
+                            {formatMNT(formData.boxPrice / formData.boxSize)}
+                          </b>
+                          {formData.price > 0 &&
+                            formData.boxPrice / formData.boxSize < formData.price && (
+                              <span className="ml-1 text-emerald-700 font-bold">
+                                (
+                                {Math.round(
+                                  ((formData.price - formData.boxPrice / formData.boxSize) /
+                                    formData.price) *
+                                    100
+                                )}
+                                % хямд)
+                              </span>
+                            )}
+                        </span>
+                      ) : (
+                        <span>Хайрцагны үнийг тооцоолох:</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const calculated = (formData.price || 0) * (formData.boxSize || 1)
+                          setFormData({ ...formData, boxPrice: calculated })
+                        }}
+                        className="cursor-pointer text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-medium"
+                      >
+                        Жижиглэнгээр: {formatMNT((formData.price || 0) * (formData.boxSize || 1))}
+                      </button>
+                      {formData.hasBulkPrice && formData.bulkPrice && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const calculated = (formData.bulkPrice || 0) * (formData.boxSize || 1)
+                            setFormData({ ...formData, boxPrice: calculated })
+                          }}
+                          className="cursor-pointer text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-1 rounded font-bold"
+                        >
+                          Бөөнийхөөр:{' '}
+                          {formatMNT((formData.bulkPrice || 0) * (formData.boxSize || 1))}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -970,6 +1123,29 @@ export function AdminView({
   const [statusFilter, setStatusFilter] = useState<'all' | ProductStatus>('all')
   const [selectedCatFilter, setSelectedCatFilter] = useState<string>('all')
   const [syncNotice, setSyncNotice] = useState<string>('')
+  const [adminTab, setAdminTab] = useState<'products' | 'orders'>('products')
+  const [orders, setOrders] = useState<Order[]>([])
+  const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(false)
+
+  const loadOrders = async () => {
+    setIsLoadingOrders(true)
+    try {
+      const fetched = await fetchOrdersFromSupabase()
+      if (fetched) {
+        setOrders(fetched)
+      }
+    } catch (e) {
+      console.warn('Failed to load orders:', e)
+    } finally {
+      setIsLoadingOrders(false)
+    }
+  }
+
+  useEffect(() => {
+    loadOrders()
+  }, [])
+
+  const pendingOrdersCount = orders.filter((o) => o.status === 'pending').length
 
   const showSyncNotification = (msg: string) => {
     setSyncNotice(msg)
@@ -1302,8 +1478,77 @@ export function AdminView({
         </div>
       </header>
 
-      {/* Settings Card: Contacts & Stock Count */}
+      {/* Admin Primary Tabs: Products vs Orders */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="inline-flex rounded-[8px] border border-slate-200 bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setAdminTab('products')}
+              className={`cursor-pointer inline-flex items-center gap-2 rounded-[6px] px-4 py-2 text-xs font-bold transition-all ${
+                adminTab === 'products'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Package className="size-4 text-[#DE3B28]" />
+              <span>Бараа Бүтээгдэхүүн ({products.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAdminTab('orders')
+                loadOrders()
+              }}
+              className={`cursor-pointer inline-flex items-center gap-2 rounded-[6px] px-4 py-2 text-xs font-bold transition-all ${
+                adminTab === 'orders'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShoppingBag className="size-4 text-[#FFCE00]" />
+              <span>Хүлээн авсан захиалгууд ({orders.length})</span>
+              {pendingOrdersCount > 0 && (
+                <span className="rounded-full bg-[#DE3B28] px-2 py-0.5 text-[10px] font-black text-white animate-pulse">
+                  {pendingOrdersCount} шинэ
+                </span>
+              )}
+            </button>
+          </div>
+
+          {adminTab === 'orders' ? (
+            <button
+              type="button"
+              onClick={loadOrders}
+              disabled={isLoadingOrders}
+              className="cursor-pointer min-h-[38px] inline-flex items-center gap-1.5 rounded-[8px] border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+            >
+              <RefreshCw className={`size-3.5 ${isLoadingOrders ? 'animate-spin text-[#DE3B28]' : ''}`} />
+              <span>Шинэчлэх</span>
+            </button>
+          ) : (
+            <div className="text-xs text-slate-500 font-medium">
+              Нийт {products.length} бараа, {categories.filter((c) => c !== 'Бүх ангилал').length} төрөл
+            </div>
+          )}
+        </div>
+      </section>
+
+      {adminTab === 'orders' ? (
+        <section className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
+          <AdminOrdersView
+            orders={orders}
+            setOrders={setOrders}
+            onRefresh={loadOrders}
+            isLoading={isLoadingOrders}
+            onShowNotice={showSyncNotification}
+          />
+        </section>
+      ) : (
+        <>
+          {/* Settings Card: Contacts & Stock Count */}
+          <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-5">
         <div className="rounded-[8px] border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-orange-50/40 p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-[8px] bg-[#DE3B28] text-white shadow-xs">
@@ -1686,6 +1931,19 @@ export function AdminView({
                             )}
                           </div>
 
+                          {/* Box packaging callout if boxed */}
+                          {p.isBoxed && p.boxSize && (
+                            <div className="mt-2 flex items-center justify-between rounded-[6px] bg-blue-50/80 px-2 py-1 border border-blue-200 text-xs">
+                              <span className="flex items-center gap-1 font-bold text-blue-900 text-[11px]">
+                                <Package className="size-3 text-blue-600" />
+                                <span>Хайрцагт {p.boxSize} ш</span>
+                              </span>
+                              <b className="font-extrabold text-blue-800 text-[11px]">
+                                {formatMNT(p.boxPrice || p.price * p.boxSize)}
+                              </b>
+                            </div>
+                          )}
+
                           {/* Quick 1-Click 3-Status Selector */}
                           <div className="mt-3 rounded-[8px] bg-slate-50 p-2 border border-slate-200/80">
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
@@ -1802,11 +2060,18 @@ export function AdminView({
                             </td>
                             <td className="py-2.5 px-3 font-semibold text-slate-900 max-w-xs">
                               <div className="line-clamp-1">{p.name}</div>
-                              {p.badge && (
-                                <span className="inline-block mt-0.5 text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded-[4px]">
-                                  {p.badge}
-                                </span>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                {p.badge && (
+                                  <span className="inline-block text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded-[4px]">
+                                    {p.badge}
+                                  </span>
+                                )}
+                                {p.isBoxed && p.boxSize && (
+                                  <span className="inline-block text-[9px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-[4px]">
+                                    📦 {p.boxSize}ш/хайрцаг ({formatMNT(p.boxPrice || p.price * p.boxSize)})
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-2.5 px-2 font-mono font-medium text-slate-500">
                               {p.sku}
@@ -1877,6 +2142,8 @@ export function AdminView({
           </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* Edit/Add Modal with Delete support */}
       {editing && (

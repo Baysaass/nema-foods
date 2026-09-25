@@ -53,7 +53,9 @@ import {
   Database,
   RefreshCw,
   ExternalLink,
-  Key
+  Key,
+  ShoppingBag,
+  ShoppingCart
 } from 'lucide-react'
 import {
   getSupabaseCredentials,
@@ -70,6 +72,13 @@ import {
   seedInitialDataToSupabase,
   testSupabaseConnection,
 } from '@/lib/supabase'
+import { CartModal } from '@/components/CartModal'
+import { AddToCartDialog } from '@/components/AddToCartDialog'
+import {
+  CartItem,
+  CartPackaging,
+  extractBoxInfoFromDescription,
+} from '@/lib/types'
 
 const FlipBookView = dynamic(() => import('@/components/FlipBookView'), {
   ssr: false,
@@ -101,6 +110,10 @@ export type Product = {
   badge?: string // 'Онцлох', 'Бөөний үнэ', 'Шинэ', 'Шилдэг'
   color?: string
   image?: string // WebP форматтай зургийн Data URL
+  // Хайрцаг / Багц савалгааны тохиргоо (Box / Case packaging)
+  isBoxed?: boolean // Хайрцагтай бүтээгдэхүүн эсэх
+  boxSize?: number // 1 хайрцаг дахь ширхэг (жишээ: 12, 24, 48)
+  boxPrice?: number // 1 хайрцагны үнэ (₮)
 }
 
 export type CatalogSettings = {
@@ -209,6 +222,16 @@ export function normalizeProduct(p: any): Product {
     p.hasBulkPrice !== undefined
       ? Boolean(p.hasBulkPrice)
       : Boolean(p.bulkPrice && p.bulkPrice < p.price)
+  const boxExtracted = extractBoxInfoFromDescription(p.description || '')
+  const isBoxed =
+    p.isBoxed !== undefined
+      ? Boolean(p.isBoxed)
+      : (boxExtracted.isBoxed ?? false)
+  const boxSize =
+    p.boxSize !== undefined ? Number(p.boxSize) : boxExtracted.boxSize
+  const boxPrice =
+    p.boxPrice !== undefined ? Number(p.boxPrice) : boxExtracted.boxPrice
+
   return {
     ...p,
     status,
@@ -219,6 +242,9 @@ export function normalizeProduct(p: any): Product {
     bulkFrom: Number(p.bulkFrom) || 5,
     stockCount: Number(p.stockCount) || 0,
     image: p.image || undefined,
+    isBoxed,
+    boxSize,
+    boxPrice,
   }
 }
 
@@ -703,17 +729,19 @@ function ProductVisual({
   )
 }
 
-// --- БҮТЭЭГДЭХҮҮНИЙ ДЭЛГЭРЭНГҮЙ ХАРАХ МОДАЛ (ЗАХИАЛАХ ХЭСЭГГҮЙ ЦЭВЭР ТАНИЛЦУУЛГА) ---
+// --- БҮТЭЭГДЭХҮҮНИЙ ДЭЛГЭРЭНГҮЙ ХАРАХ МОДАЛ ---
 function ProductDetailModal({
   product,
   showStockCount = true,
   settings = defaultSettings,
   onClose,
+  onAddToCart,
 }: {
   product: Product
   showStockCount?: boolean
   settings?: CatalogSettings
   onClose: () => void
+  onAddToCart?: (p: Product) => void
 }) {
   const status = getProductStatus(product)
   const badgeInfo = getStatusBadgeInfo(status)
@@ -830,6 +858,31 @@ function ProductDetailModal({
             </div>
           )}
 
+          {/* Box Packaging Info (If configured) */}
+          {product.isBoxed && product.boxSize && (
+            <div className="rounded-[8px] bg-amber-500/10 p-3.5 border border-amber-300/80 flex items-center justify-between text-xs text-amber-950">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-[8px] bg-amber-200/60 text-[#DE3B28]">
+                  <Package className="size-5" />
+                </div>
+                <div>
+                  <span className="font-bold text-xs">Хайрцагны савлагаа:</span>
+                  <p className="text-[11px] text-amber-900 font-medium">
+                    1 хайрцагт <b>{product.boxSize} {product.unit}</b> багтана
+                  </p>
+                </div>
+              </div>
+              {product.boxPrice ? (
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-500 block">Хайрцагны үнэ:</span>
+                  <span className="text-sm font-extrabold text-[#DE3B28]">
+                    {formatMNT(product.boxPrice)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          )}
+
           {product.description && (
             <div className="rounded-[8px] border border-slate-200 bg-slate-50/50 p-3.5">
               <h4 className="text-xs font-bold text-slate-800 mb-1">Бүтээгдэхүүний тайлбар:</h4>
@@ -859,29 +912,45 @@ function ProductDetailModal({
           </div>
         </div>
 
-        <div className="mt-5 flex justify-end border-t border-slate-100 pt-3">
+        <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
           <button
             onClick={onClose}
-            className="cursor-pointer min-h-[44px] w-full sm:w-auto rounded-[8px] bg-slate-900 px-6 py-2.5 text-xs font-bold text-white hover:bg-[#DE3B28] transition-colors"
+            className="cursor-pointer min-h-[44px] rounded-[8px] border border-slate-300 px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
           >
             Хаах
           </button>
+          {onAddToCart && status !== 'out_of_stock' && (
+            <button
+              onClick={() => {
+                onAddToCart(product)
+                onClose()
+              }}
+              className="cursor-pointer min-h-[44px] inline-flex items-center gap-2 rounded-[8px] bg-[#DE3B28] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#b82a1a] transition-all"
+            >
+              <ShoppingBag className="size-4" />
+              <span>Сагсанд нэмэх</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// --- Барааны карт бүрэлдэхүүн хэсэг (Grid view, 8px corners, no ordering button) ---
+// --- Барааны карт бүрэлдэхүүн хэсэг (Grid view, 8px corners, with B2B Cart action) ---
 function ProductCard({
   product,
   showStockCount = true,
   onOpenDetail,
+  onAddToCart,
 }: {
   product: Product
   showStockCount?: boolean
   onOpenDetail: (p: Product) => void
+  onAddToCart: (p: Product) => void
 }) {
+  const status = getProductStatus(product)
+  const isOutOfStock = status === 'out_of_stock'
   const hasBulk = Boolean(product.hasBulkPrice && product.bulkPrice && product.bulkPrice < product.price)
   const savingsPercent = hasBulk
     ? Math.round(((product.price - (product.bulkPrice || product.price)) / product.price) * 100)
@@ -948,33 +1017,59 @@ function ProductCard({
               </span>
             </div>
           )}
+
+          {/* Box Packaging indicator */}
+          {product.isBoxed && product.boxSize && (
+            <div className="mt-2.5 flex items-center justify-between rounded-[6px] bg-amber-500/10 border border-amber-300/80 px-2.5 py-1.5 text-[11px] font-semibold text-amber-950">
+              <span className="flex items-center gap-1.5">
+                <Package className="size-3.5 text-[#DE3B28]" />
+                <span>Хайрцагтаа: <b>{product.boxSize} {product.unit}</b></span>
+              </span>
+              {product.boxPrice ? (
+                <span className="font-extrabold text-[#DE3B28]">{formatMNT(product.boxPrice)}</span>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="border-t border-slate-100 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50/40">
+      <div className="border-t border-slate-100 p-2.5 sm:p-3 bg-slate-50/40 flex items-center gap-2">
         <button
           onClick={() => onOpenDetail(product)}
-          className="cursor-pointer min-h-[44px] flex w-full items-center justify-center gap-1.5 rounded-[8px] py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-amber-50 hover:text-[#DE3B28] hover:border-amber-300 transition-all duration-200 active:scale-[0.98]"
+          className="cursor-pointer min-h-[40px] flex-1 flex items-center justify-center gap-1 rounded-[8px] py-2 px-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          title="Дэлгэрэнгүй мэдээлэл"
         >
-          <Info className="size-4 text-[#DE3B28]" />
-          <span>Дэлгэрэнгүй мэдээлэл</span>
+          <Info className="size-3.5 text-slate-500" />
+          <span>Дэлгэрэнгүй</span>
+        </button>
+        <button
+          onClick={() => onAddToCart(product)}
+          disabled={isOutOfStock}
+          className="cursor-pointer min-h-[40px] flex-1 flex items-center justify-center gap-1.5 rounded-[8px] py-2 px-2 text-xs font-bold text-white bg-[#DE3B28] hover:bg-[#b82a1a] disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-colors"
+          title="Байгууллагын захиалгад сагслах"
+        >
+          <ShoppingBag className="size-3.5" />
+          <span>Сагслах</span>
         </button>
       </div>
     </article>
   )
 }
 
-// --- Барааны жагсаалт харагдац (List view, 8px corners, no ordering button) ---
+// --- Барааны жагсаалт харагдац (List view, 8px corners, with B2B Cart action) ---
 function ProductListItem({
   product,
   showStockCount = true,
   onOpenDetail,
+  onAddToCart,
 }: {
   product: Product
   showStockCount?: boolean
   onOpenDetail: (p: Product) => void
+  onAddToCart: (p: Product) => void
 }) {
   const status = getProductStatus(product)
+  const isOutOfStock = status === 'out_of_stock'
   const badgeInfo = getStatusBadgeInfo(status)
   const hasBulk = Boolean(product.hasBulkPrice && product.bulkPrice && product.bulkPrice < product.price)
   const savingsPercent = hasBulk
@@ -1014,6 +1109,12 @@ function ProductListItem({
               <span className={`size-1.5 rounded-full ${badgeInfo.dot}`} />
               {badgeInfo.shortLabel}
             </span>
+            {product.isBoxed && product.boxSize && (
+              <span className="inline-flex items-center gap-1 rounded-[6px] bg-amber-500/10 border border-amber-300/80 px-2 py-0.5 text-[10px] font-bold text-amber-950">
+                <Package className="size-3 text-[#DE3B28]" />
+                <span>1 хайрцаг = {product.boxSize} {product.unit} {product.boxPrice ? `(${formatMNT(product.boxPrice)})` : ''}</span>
+              </span>
+            )}
           </div>
           <h4 className="mt-1 font-bold text-sm sm:text-base text-slate-900 group-hover:text-[#DE3B28] transition-colors">
             {product.name}
@@ -1042,13 +1143,25 @@ function ProductListItem({
           )}
         </div>
 
-        <button
-          onClick={() => onOpenDetail(product)}
-          className="cursor-pointer min-h-[44px] inline-flex items-center gap-1.5 rounded-[8px] bg-slate-900 px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#DE3B28] transition-all shrink-0"
-        >
-          <Info className="size-3.5" />
-          <span>Дэлгэрэнгүй</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onOpenDetail(product)}
+            className="cursor-pointer min-h-[40px] inline-flex items-center gap-1 rounded-[8px] border border-slate-300 bg-white px-3 sm:px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-all shrink-0"
+            title="Дэлгэрэнгүй мэдээлэл"
+          >
+            <Info className="size-3.5 text-slate-500" />
+            <span className="hidden xs:inline">Дэлгэрэнгүй</span>
+          </button>
+          <button
+            onClick={() => onAddToCart(product)}
+            disabled={isOutOfStock}
+            className="cursor-pointer min-h-[40px] inline-flex items-center gap-1.5 rounded-[8px] bg-[#DE3B28] px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#b82a1a] disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
+            title="Байгууллагын сагслах"
+          >
+            <ShoppingBag className="size-3.5" />
+            <span>Сагслах</span>
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -3579,6 +3692,111 @@ function CatalogView({
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
 
+  // --- B2B Cart State ---
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [isCartOpen, setIsCartOpen] = useState(false)
+  const [dialogProduct, setDialogProduct] = useState<Product | null>(null)
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('nemafoods_b2b_cart')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          setCart(parsed)
+        }
+      }
+    } catch (e) {
+      console.warn('Cart load error:', e)
+    }
+  }, [])
+
+  // Helper to persist cart state
+  const updateCartState = (newCart: CartItem[]) => {
+    setCart(newCart)
+    try {
+      localStorage.setItem('nemafoods_b2b_cart', JSON.stringify(newCart))
+    } catch (e) {}
+  }
+
+  const handleOpenAddToCart = (product: Product) => {
+    setDialogProduct(product)
+    setIsAddDialogOpen(true)
+  }
+
+  const handleAddToCart = (
+    product: Product,
+    packaging: CartPackaging,
+    quantity: number,
+    unitPrice: number
+  ) => {
+    const existingIndex = cart.findIndex(
+      (it) => it.productId === product.id && it.packaging === packaging
+    )
+    if (existingIndex >= 0) {
+      const updated = [...cart]
+      const nextQty = updated[existingIndex].quantity + quantity
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        quantity: nextQty,
+        itemTotal: nextQty * updated[existingIndex].unitPrice,
+      }
+      updateCartState(updated)
+    } else {
+      const newItem: CartItem = {
+        productId: product.id,
+        sku: product.sku,
+        name: product.name,
+        image: product.image,
+        packaging,
+        unit: product.unit,
+        boxSize: product.boxSize,
+        unitPrice,
+        quantity,
+        itemTotal: quantity * unitPrice,
+      }
+      updateCartState([...cart, newItem])
+    }
+  }
+
+  const handleUpdateQuantity = (
+    productId: number,
+    packaging: CartPackaging,
+    quantity: number
+  ) => {
+    if (quantity <= 0) {
+      handleRemoveItem(productId, packaging)
+      return
+    }
+    const updated = cart.map((it) => {
+      if (it.productId === productId && it.packaging === packaging) {
+        return {
+          ...it,
+          quantity,
+          itemTotal: quantity * it.unitPrice,
+        }
+      }
+      return it
+    })
+    updateCartState(updated)
+  }
+
+  const handleRemoveItem = (productId: number, packaging: CartPackaging) => {
+    const updated = cart.filter(
+      (it) => !(it.productId === productId && it.packaging === packaging)
+    )
+    updateCartState(updated)
+  }
+
+  const handleClearCart = () => {
+    updateCartState([])
+  }
+
+  const cartTotalCount = cart.reduce((sum, it) => sum + it.quantity, 0)
+  const cartTotalPrice = cart.reduce((sum, it) => sum + it.itemTotal, 0)
+
   const scrollCategory = (direction: 'left' | 'right') => {
     if (categoryScrollRef.current) {
       const scrollAmount = direction === 'left' ? -200 : 200
@@ -3669,6 +3887,28 @@ function CatalogView({
             >
               <FileText className="size-4 text-[#DE3B28] shrink-0" />
               <span className="hidden sm:inline">Хэвлэх /</span> <span>PDF</span>
+            </button>
+
+            {/* B2B Shopping Cart Button */}
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative cursor-pointer min-h-[44px] inline-flex items-center gap-2 rounded-[8px] bg-[#DE3B28] px-3 sm:px-4 py-2 text-xs font-bold text-white hover:bg-[#b82a1a] transition-all shadow-xs"
+              title="Байгууллагын сагс нээх"
+            >
+              <div className="relative">
+                <ShoppingBag className="size-4" />
+                {cartTotalCount > 0 && (
+                  <span className="absolute -top-2 -right-2 flex size-4 items-center justify-center rounded-full bg-[#FFCE00] text-[10px] font-black text-slate-900 shadow-xs">
+                    {cartTotalCount}
+                  </span>
+                )}
+              </div>
+              <span className="hidden sm:inline">Сагс</span>
+              {cartTotalCount > 0 && (
+                <span className="hidden md:inline font-mono text-[11px] bg-black/20 px-1.5 py-0.5 rounded-[4px]">
+                  {formatMNT(cartTotalPrice)}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -3900,6 +4140,7 @@ function CatalogView({
                 product={product}
                 showStockCount={settings.showStockCount}
                 onOpenDetail={(p) => setSelectedProduct(p)}
+                onAddToCart={handleOpenAddToCart}
               />
             ))}
           </div>
@@ -3911,6 +4152,7 @@ function CatalogView({
                 product={product}
                 showStockCount={settings.showStockCount}
                 onOpenDetail={(p) => setSelectedProduct(p)}
+                onAddToCart={handleOpenAddToCart}
               />
             ))}
           </div>
@@ -3990,14 +4232,61 @@ function CatalogView({
         </div>
       </footer>
 
+      {/* Mobile Floating Cart Action Bar */}
+      {cartTotalCount > 0 && (
+        <div className="sm:hidden fixed bottom-4 left-3 right-3 z-40 animate-in slide-in-from-bottom duration-300">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="cursor-pointer w-full flex items-center justify-between rounded-[8px] bg-slate-900 text-white p-3.5 shadow-2xl border border-amber-300/40 active:scale-[0.99] transition-transform"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex size-8 items-center justify-center rounded-full bg-[#DE3B28] text-white">
+                <ShoppingBag className="size-4" />
+                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#FFCE00] text-[9px] font-black text-slate-900">
+                  {cartTotalCount}
+                </span>
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-bold">Байгууллагын сагс</div>
+                <div className="text-[10px] text-slate-300">{cartTotalCount} бараа сонгосон</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-[#FFCE00]">{formatMNT(cartTotalPrice)}</span>
+              <ChevronRight className="size-4 text-slate-300" />
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Product Detail Modal */}
       {selectedProduct && (
         <ProductDetailModal
           product={selectedProduct}
           showStockCount={settings.showStockCount}
           settings={settings}
           onClose={() => setSelectedProduct(null)}
+          onAddToCart={handleOpenAddToCart}
         />
       )}
+
+      {/* B2B Cart & Order Modal */}
+      <CartModal
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cart={cart}
+        onUpdateQuantity={handleUpdateQuantity}
+        onRemoveItem={handleRemoveItem}
+        onClearCart={handleClearCart}
+      />
+
+      {/* Add To Cart Packaging & Quantity Dialog */}
+      <AddToCartDialog
+        isOpen={isAddDialogOpen}
+        product={dialogProduct}
+        onClose={() => setIsAddDialogOpen(false)}
+        onAddToCart={handleAddToCart}
+      />
     </main>
   )
 }
