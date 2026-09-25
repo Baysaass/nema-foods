@@ -2868,24 +2868,42 @@ function AdminView({
 
   const handleDeleteCategory = async (cat: string) => {
     if (cat === 'Бүх ангилал') {
-      alert('Энэ ангиллыг устгах боломжгүй!')
+      alert('Энэ үндсэн ангиллыг устгах боломжгүй!')
       return
     }
-    const count = products.filter((p) => p.category === cat).length
-    if (count > 0) {
-      if (
-        !confirm(
-          `"${cat}" ангилалд ${count} бараа байна. Устгавал эдгээр бараануудын ангилал хоосон болно. Үргэлжлүүлэх үү?`
-        )
-      ) {
-        return
-      }
-    }
-    setCategories(categories.filter((c) => c !== cat))
 
+    const affected = products.filter((p) => p.category === cat)
+    const count = affected.length
+
+    let confirmMsg = `"${cat}" төрлийг өгөгдлийн сангаас бүрмөсөн устгахдаа итгэлтэй байна уу?`
+    if (count > 0) {
+      confirmMsg = `"${cat}" төрөлд одоогоор ${count} бүтээгдэхүүн бүртгэлтэй байна.\n\nЭнэ төрлийг устгавал эдгээр ${count} бүтээгдэхүүний төрөл "Бусад" болж шилжинэ.\n\nУстгахдаа итгэлтэй байна уу?`
+    }
+
+    if (!confirm(confirmMsg)) return
+
+    // 1. Optimistic local update
+    const nextCategories = categories.filter((c) => c !== cat)
+    if (count > 0 && !nextCategories.includes('Бусад')) {
+      nextCategories.push('Бусад')
+    }
+    setCategories(nextCategories)
+
+    if (count > 0) {
+      setProducts((prev) =>
+        prev.map((p) => (p.category === cat ? { ...p, category: 'Бусад' } : p))
+      )
+    }
+
+    // 2. Supabase sync
     if (isSupabaseConnected) {
-      await deleteCategoryFromSupabase(cat)
-      showSyncNotification(`✓ "${cat}" ангиллыг Supabase-ээс хаслаа.`)
+      showSyncNotification(`"${cat}" төрлийг өгөгдлийн сангаас устгаж байна...`)
+      const ok = await deleteCategoryFromSupabase(cat)
+      if (ok) {
+        showSyncNotification(`✓ "${cat}" төрлийг өгөгдлийн сангаас амжилттай устгалаа.`)
+      } else {
+        showSyncNotification(`⚠️ Өгөгдлийн сангаас устгахад алдаа гарлаа.`)
+      }
     }
   }
 
@@ -3961,7 +3979,7 @@ function CatalogView({
 export default function Page() {
   // Start with empty array — prevents 20 sample products flashing before real data loads
   const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<string[]>(initialCategories)
+  const [categories, setCategories] = useState<string[]>(['Бүх ангилал'])
   const [currentMode, setCurrentMode] = useState<'catalog' | 'pdf' | 'admin' | 'flipbook'>('catalog')
   const [settings, setSettings] = useState<CatalogSettings>({ showStockCount: true })
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false)
@@ -3985,25 +4003,13 @@ export default function Page() {
           const remoteSettings = await fetchSettingsFromSupabase()
 
           if (remoteProducts !== null) {
-            if (remoteProducts.length > 0) {
-              setProducts(remoteProducts)
-            } else {
-              // Connected but table is empty -> seed initial data automatically
-              await seedInitialDataToSupabase(initialProducts, initialCategories)
-              const reloaded = await fetchProductsFromSupabase()
-              if (reloaded && reloaded.length > 0) {
-                setProducts(reloaded)
-              } else {
-                // Seed failed — fall back to initial data
-                setProducts(initialProducts)
-              }
-            }
+            setProducts(remoteProducts)
           } else {
             // Fetch returned null (RLS or other error) — use initial data
             setProducts(initialProducts)
           }
 
-          if (remoteCats && remoteCats.length > 0) {
+          if (remoteCats !== null) {
             setCategories(remoteCats)
           }
 

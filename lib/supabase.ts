@@ -322,7 +322,7 @@ export async function fetchCategoriesFromSupabase(): Promise<string[] | null> {
       return null
     }
 
-    if (!data || data.length === 0) return []
+    if (!data || data.length === 0) return ['Бүх ангилал']
 
     const cats = data.map((c: any) => c.name)
     if (!cats.includes('Бүх ангилал')) {
@@ -340,10 +340,13 @@ export async function saveCategoryToSupabase(name: string): Promise<boolean> {
   const client = getSupabaseClient()
   if (!client) return false
 
+  const cleanName = name.trim()
+  if (!cleanName || cleanName === 'Бүх ангилал') return false
+
   try {
     const { error } = await client
       .from('categories')
-      .insert({ name, sort_order: 10 })
+      .upsert({ name: cleanName, sort_order: 10 }, { onConflict: 'name' })
 
     if (error) {
       console.error('Error saving category to Supabase:', error.message)
@@ -356,17 +359,76 @@ export async function saveCategoryToSupabase(name: string): Promise<boolean> {
   }
 }
 
+// --- Update Category in Supabase (Rename & cascade to products) ---
+export async function updateCategoryInSupabase(oldName: string, newName: string): Promise<boolean> {
+  const client = getSupabaseClient()
+  if (!client) return false
+
+  const cleanNew = newName.trim()
+  if (!cleanNew || cleanNew === 'Бүх ангилал' || cleanNew === oldName) return false
+
+  try {
+    // 1. Update in categories table
+    const { error: catErr } = await client
+      .from('categories')
+      .update({ name: cleanNew })
+      .eq('name', oldName)
+
+    if (catErr) {
+      console.error('Error updating category in Supabase:', catErr.message)
+      return false
+    }
+
+    // 2. Cascade update to products table
+    const { error: prodErr } = await client
+      .from('products')
+      .update({ category: cleanNew })
+      .eq('category', oldName)
+
+    if (prodErr) {
+      console.warn('Warning updating products on category rename:', prodErr.message)
+    }
+
+    return true
+  } catch (e) {
+    console.error('Exception updating category:', e)
+    return false
+  }
+}
+
 // --- Delete Category from Supabase ---
 export async function deleteCategoryFromSupabase(name: string): Promise<boolean> {
   const client = getSupabaseClient()
   if (!client) return false
 
   try {
-    const { error } = await client.from('categories').delete().eq('name', name)
+    // 1. Delete from categories table
+    const { error } = await client
+      .from('categories')
+      .delete({ count: 'exact' })
+      .eq('name', name)
+
     if (error) {
       console.error('Error deleting category from Supabase:', error.message)
       return false
     }
+
+    // 2. Update any products that had this category to 'Бусад' so they remain valid
+    const { data: updatedProds, error: prodErr } = await client
+      .from('products')
+      .update({ category: 'Бусад' })
+      .eq('category', name)
+      .select('id')
+
+    if (prodErr) {
+      console.warn('Warning updating orphaned products on category delete:', prodErr.message)
+    }
+
+    // 3. If products were reassigned to 'Бусад', ensure 'Бусад' exists in categories
+    if (updatedProds && updatedProds.length > 0) {
+      await client.from('categories').upsert({ name: 'Бусад', sort_order: 99 }, { onConflict: 'name' })
+    }
+
     return true
   } catch (e) {
     console.error('Exception deleting category:', e)

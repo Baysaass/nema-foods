@@ -23,8 +23,8 @@ import {
 export default function AdminPage() {
   const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
-  const [products, setProducts] = useState<Product[]>(initialProducts)
-  const [categories, setCategories] = useState<string[]>(initialCategories)
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<string[]>(['Бүх ангилал'])
   const [settings, setSettings] = useState<CatalogSettings>({ showStockCount: true })
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
@@ -76,18 +76,10 @@ export default function AdminPage() {
           const remoteSettings = await fetchSettingsFromSupabase()
 
           if (remoteProducts !== null) {
-            if (remoteProducts.length > 0) {
-              setProducts(remoteProducts)
-            } else {
-              await seedInitialDataToSupabase(initialProducts, initialCategories)
-              const reloaded = await fetchProductsFromSupabase()
-              if (reloaded && reloaded.length > 0) {
-                setProducts(reloaded)
-              }
-            }
+            setProducts(remoteProducts)
           }
 
-          if (remoteCats && remoteCats.length > 0) {
+          if (remoteCats !== null) {
             setCategories(remoteCats)
           }
 

@@ -42,6 +42,7 @@ import {
   deleteProductFromSupabase,
   saveCategoryToSupabase,
   deleteCategoryFromSupabase,
+  updateCategoryInSupabase,
   saveSettingsToSupabase,
   seedInitialDataToSupabase,
   testSupabaseConnection,
@@ -245,12 +246,18 @@ export function ProductEditModal({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-700">Ангилал *</label>
+              <label className="text-xs font-semibold text-slate-700">Ангилал / Төрөл *</label>
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="cursor-pointer mt-1 h-11 w-full rounded-[8px] border border-slate-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-hidden"
               >
+                {!availableCategories.includes(formData.category) && formData.category && (
+                  <option value={formData.category}>{formData.category}</option>
+                )}
+                {availableCategories.length === 0 && !formData.category && (
+                  <option value="">-- Төрөл сонгох --</option>
+                )}
                 {availableCategories.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -760,6 +767,7 @@ export function AdminView({
   const [newCat, setNewCat] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | ProductStatus>('all')
+  const [selectedCatFilter, setSelectedCatFilter] = useState<string>('all')
   const [syncNotice, setSyncNotice] = useState<string>('')
 
   const showSyncNotification = (msg: string) => {
@@ -842,43 +850,112 @@ export function AdminView({
     const trimmed = newCat.trim()
     if (!trimmed) return
     if (categories.includes(trimmed)) {
-      alert('Энэ ангилал аль хэдийн бүртгэгдсэн байна!')
+      alert('Энэ төрөл аль хэдийн бүртгэгдсэн байна!')
       return
     }
-    setCategories([...categories, trimmed])
+
+    // 1. Optimistic local state update
+    setCategories((prev) => [...prev, trimmed])
     setNewCat('')
 
+    // 2. Direct Supabase sync
     if (isSupabaseConnected) {
-      await saveCategoryToSupabase(trimmed)
-      showSyncNotification(`✓ "${trimmed}" ангиллыг Supabase-д хадгаллаа.`)
+      showSyncNotification(`"${trimmed}" төрлийг өгөгдлийн санд нэмж байна...`)
+      const ok = await saveCategoryToSupabase(trimmed)
+      if (ok) {
+        showSyncNotification(`✓ "${trimmed}" төрөл өгөгдлийн санд амжилттай хадгалагдлаа.`)
+      } else {
+        showSyncNotification(`⚠️ Өгөгдлийн санд хадгалахад алдаа гарлаа.`)
+        onRefreshFromSupabase()
+      }
+    }
+  }
+
+  const handleEditCategory = async (oldName: string) => {
+    if (oldName === 'Бүх ангилал') return
+    const newName = prompt(`"${oldName}" төрлийн шинэ нэрийг оруулна уу:`, oldName)
+    if (!newName) return
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) return
+
+    if (categories.includes(trimmed)) {
+      alert('Энэ нэртэй төрөл аль хэдийн байна!')
+      return
+    }
+
+    // 1. Optimistic update
+    setCategories((prev) => prev.map((c) => (c === oldName ? trimmed : c)))
+    setProducts((prev) =>
+      prev.map((p) => (p.category === oldName ? { ...p, category: trimmed } : p))
+    )
+    if (selectedCatFilter === oldName) {
+      setSelectedCatFilter(trimmed)
+    }
+
+    // 2. Supabase sync
+    if (isSupabaseConnected) {
+      showSyncNotification(`"${oldName}" төрлийг өгөгдлийн санд шинэчилж байна...`)
+      const ok = await updateCategoryInSupabase(oldName, trimmed)
+      if (ok) {
+        showSyncNotification(`✓ "${trimmed}" төрөл өгөгдлийн санд амжилттай шинэчлэгдлээ.`)
+      } else {
+        showSyncNotification(`⚠️ Өгөгдлийн санд шинэчлэхэд алдаа гарлаа.`)
+        onRefreshFromSupabase()
+      }
     }
   }
 
   const handleDeleteCategory = async (cat: string) => {
     if (cat === 'Бүх ангилал') {
-      alert('Энэ ангиллыг устгах боломжгүй!')
+      alert('Энэ үндсэн ангиллыг устгах боломжгүй!')
       return
     }
-    const count = products.filter((p) => p.category === cat).length
-    if (count > 0) {
-      if (
-        !confirm(
-          `"${cat}" ангилалд ${count} бараа байна. Устгавал эдгээр бараануудын ангилал хоосон болно. Үргэлжлүүлэх үү?`
-        )
-      ) {
-        return
-      }
-    }
-    setCategories(categories.filter((c) => c !== cat))
 
+    const affected = products.filter((p) => p.category === cat)
+    const count = affected.length
+
+    let confirmMsg = `"${cat}" төрлийг өгөгдлийн сангаас бүрмөсөн устгахдаа итгэлтэй байна уу?`
+    if (count > 0) {
+      confirmMsg = `"${cat}" төрөлд одоогоор ${count} бүтээгдэхүүн бүртгэлтэй байна.\n\nЭнэ төрлийг устгавал эдгээр ${count} бүтээгдэхүүний төрөл "Бусад" болж шилжинэ.\n\nУстгахдаа итгэлтэй байна уу?`
+    }
+
+    if (!confirm(confirmMsg)) return
+
+    // 1. Optimistic local update
+    const nextCategories = categories.filter((c) => c !== cat)
+    if (count > 0 && !nextCategories.includes('Бусад')) {
+      nextCategories.push('Бусад')
+    }
+    setCategories(nextCategories)
+
+    if (count > 0) {
+      setProducts((prev) =>
+        prev.map((p) => (p.category === cat ? { ...p, category: 'Бусад' } : p))
+      )
+    }
+    if (selectedCatFilter === cat) {
+      setSelectedCatFilter('all')
+    }
+
+    // 2. Supabase sync
     if (isSupabaseConnected) {
-      await deleteCategoryFromSupabase(cat)
-      showSyncNotification(`✓ "${cat}" ангиллыг Supabase-ээс хаслаа.`)
+      showSyncNotification(`"${cat}" төрлийг өгөгдлийн сангаас устгаж байна...`)
+      const ok = await deleteCategoryFromSupabase(cat)
+      if (ok) {
+        showSyncNotification(`✓ "${cat}" төрлийг өгөгдлийн сангаас амжилттай устгалаа.`)
+      } else {
+        showSyncNotification(`⚠️ Өгөгдлийн сангаас устгахад алдаа гарлаа.`)
+        onRefreshFromSupabase()
+      }
     }
   }
 
   const filteredProducts = useMemo(() => {
     let list = [...products]
+
+    if (selectedCatFilter !== 'all') {
+      list = list.filter((p) => p.category === selectedCatFilter)
+    }
 
     if (statusFilter !== 'all') {
       list = list.filter((p) => getProductStatus(p) === statusFilter)
@@ -895,7 +972,7 @@ export function AdminView({
     }
 
     return list
-  }, [products, search, statusFilter])
+  }, [products, search, statusFilter, selectedCatFilter])
 
   // Catalog back link destination
   const handleBackToCatalog = () => {
@@ -1135,22 +1212,30 @@ export function AdminView({
           {/* Left: Category Manager */}
           <aside className="space-y-4">
             <div className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-xs">
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Ангилал нэмэх
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Бүтээгдэхүүний төрөл
+                </h3>
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {Math.max(0, categories.filter((c) => c !== 'Бүх ангилал').length)} төрөл
+                </span>
+              </div>
+
               <div className="mt-2.5 flex gap-1.5">
                 <input
                   type="text"
                   value={newCat}
                   onChange={(e) => setNewCat(e.target.value)}
-                  placeholder="Шинэ ангиллын нэр..."
+                  placeholder="Шинэ төрлийн нэр..."
                   className="h-9 w-full rounded-[8px] border border-slate-300 px-2.5 text-xs focus:border-amber-500 focus:outline-hidden"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleAddCategory()
                   }}
                 />
                 <button
+                  type="button"
                   onClick={handleAddCategory}
+                  title="Шинэ төрөл нэмэх"
                   className="cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[8px] bg-slate-900 text-white hover:bg-[#DE3B28] transition-colors shrink-0"
                 >
                   <Plus className="size-4" />
@@ -1163,24 +1248,67 @@ export function AdminView({
                     cat === 'Бүх ангилал'
                       ? products.length
                       : products.filter((p) => p.category === cat).length
+                  const isSelected =
+                    selectedCatFilter === cat || (cat === 'Бүх ангилал' && selectedCatFilter === 'all')
 
                   return (
                     <div
                       key={cat}
-                      className="group flex items-center justify-between rounded-[8px] px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      className={`group flex items-center justify-between rounded-[8px] px-2.5 py-1.5 text-xs font-medium transition-all ${
+                        isSelected
+                          ? 'bg-amber-100 text-amber-950 font-bold border border-amber-300/80 shadow-2xs'
+                          : 'text-slate-700 hover:bg-slate-100/80'
+                      }`}
                     >
-                      <div className="flex items-center gap-1.5 truncate">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedCatFilter(
+                            cat === 'Бүх ангилал' ? 'all' : selectedCatFilter === cat ? 'all' : cat
+                          )
+                        }
+                        className="flex-1 flex items-center gap-1.5 truncate text-left cursor-pointer min-h-[28px]"
+                        title={
+                          cat === 'Бүх ангилал'
+                            ? 'Бүх барааг харах'
+                            : `Зөвхөн "${cat}" төрлийн барааг шүүх`
+                        }
+                      >
                         <span className="truncate">{cat}</span>
-                        <span className="font-mono text-[10px] text-slate-400">({count})</span>
-                      </div>
-                      {cat !== 'Бүх ангилал' && (
-                        <button
-                          onClick={() => handleDeleteCategory(cat)}
-                          title="Ангилал устгах"
-                          className="cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center text-slate-400 hover:text-rose-600 transition-colors shrink-0"
+                        <span
+                          className={`font-mono text-[10px] ${
+                            isSelected ? 'text-amber-800' : 'text-slate-400'
+                          }`}
                         >
-                          <Trash2 className="size-3.5" />
-                        </button>
+                          ({count})
+                        </span>
+                      </button>
+
+                      {cat !== 'Бүх ангилал' && (
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditCategory(cat)
+                            }}
+                            title="Төрлийн нэр засах"
+                            className="cursor-pointer size-7 flex items-center justify-center rounded-[6px] text-slate-400 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteCategory(cat)
+                            }}
+                            title="Төрөл устгах"
+                            className="cursor-pointer size-7 flex items-center justify-center rounded-[6px] text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   )
@@ -1203,13 +1331,26 @@ export function AdminView({
                 />
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {selectedCatFilter !== 'all' && (
+                  <span className="inline-flex items-center gap-1 rounded-[6px] bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 text-xs font-bold shadow-2xs">
+                    <span>Төрөл: {selectedCatFilter}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCatFilter('all')}
+                      className="cursor-pointer hover:text-rose-600 font-black ml-1 text-sm leading-none"
+                      title="Төрлийн шүүлтүүр арилгах"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
                 {statusFilter !== 'all' && (
                   <button
                     onClick={() => setStatusFilter('all')}
                     className="cursor-pointer text-xs text-slate-500 hover:text-slate-800 underline"
                   >
-                    Шүүлтүүр арилгах
+                    Төлөв арилгах
                   </button>
                 )}
 
