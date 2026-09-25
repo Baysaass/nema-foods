@@ -35,10 +35,11 @@ export function AddToCartDialog({
   const [quantity, setQuantity] = useState<number>(1)
 
   const currentUnitPrice = packaging === 'box' ? defaultBoxPrice : product.price
-  const subtotal = currentUnitPrice * quantity
+  const subtotal = currentUnitPrice * (quantity || 1)
 
   const handleConfirm = () => {
-    onAddToCart(product, packaging, quantity, currentUnitPrice)
+    const finalQty = Math.max(1, quantity || 1)
+    onAddToCart(product, packaging, finalQty, currentUnitPrice)
     onClose()
   }
 
@@ -139,29 +140,53 @@ export function AddToCartDialog({
             </div>
           )}
 
-          {/* Quantity Selector */}
+          {/* Quantity Selector with Direct Typing */}
           <div>
             <label className="text-xs font-bold text-slate-700 block mb-1.5">
               Тоо хэмжээ ({packaging === 'box' ? 'хайрцаг' : product.unit}):
             </label>
-            <div className="flex items-center justify-between rounded-[8px] border border-slate-300 p-1.5">
+            <div className="flex items-center justify-between rounded-[8px] border border-slate-300 p-1.5 bg-white">
               <button
                 type="button"
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                className="cursor-pointer size-9 rounded-[6px] bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold"
+                onClick={() => setQuantity(Math.max(1, (quantity || 1) - 1))}
+                className="cursor-pointer size-10 rounded-[6px] bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold transition-colors"
+                title="1-ээр хасах"
               >
                 <Minus className="size-4" />
               </button>
-              <div className="text-center font-black text-base text-slate-900 px-4">
-                {quantity}{' '}
-                <span className="text-xs font-medium text-slate-500">
+              <div className="flex items-center justify-center gap-1.5 flex-1 px-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="99999"
+                  value={quantity === 0 ? '' : quantity}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val === '') {
+                      setQuantity(0)
+                    } else {
+                      const num = parseInt(val, 10)
+                      if (!isNaN(num) && num >= 0) {
+                        setQuantity(num)
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!quantity || quantity < 1) {
+                      setQuantity(1)
+                    }
+                  }}
+                  className="w-24 text-center font-black text-lg text-slate-900 border border-slate-200 rounded-[6px] py-1 focus:border-[#DE3B28] focus:outline-hidden focus:ring-1 focus:ring-[#DE3B28]"
+                />
+                <span className="text-xs font-semibold text-slate-500">
                   {packaging === 'box' ? 'хайрцаг' : product.unit}
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => setQuantity(quantity + 1)}
-                className="cursor-pointer size-9 rounded-[6px] bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold"
+                onClick={() => setQuantity((quantity || 0) + 1)}
+                className="cursor-pointer size-10 rounded-[6px] bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold transition-colors"
+                title="1-ээр нэмэх"
               >
                 <Plus className="size-4" />
               </button>

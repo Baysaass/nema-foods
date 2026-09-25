@@ -381,7 +381,7 @@ ${order.items
                         </div>
                       </div>
 
-                      {/* Quantity Controls */}
+                      {/* Quantity Controls with Direct Typing */}
                       <div className="flex items-center gap-1 rounded-[6px] border border-slate-200 bg-slate-50 p-0.5">
                         <button
                           type="button"
@@ -390,18 +390,35 @@ ${order.items
                           }
                           disabled={item.quantity <= 1}
                           className="cursor-pointer size-6 flex items-center justify-center rounded-[4px] bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                          title="Хасах"
                         >
                           <Minus className="size-3" />
                         </button>
-                        <span className="w-8 text-center text-xs font-bold text-slate-900">
-                          {item.quantity}
-                        </span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99999"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (val === '') {
+                              onUpdateQuantity(item.productId, item.packaging, 1)
+                            } else {
+                              const num = parseInt(val, 10)
+                              if (!isNaN(num) && num >= 1) {
+                                onUpdateQuantity(item.productId, item.packaging, num)
+                              }
+                            }
+                          }}
+                          className="w-12 text-center text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-[4px] py-0.5 focus:border-[#DE3B28] focus:outline-hidden focus:ring-1 focus:ring-[#DE3B28]"
+                        />
                         <button
                           type="button"
                           onClick={() =>
                             onUpdateQuantity(item.productId, item.packaging, item.quantity + 1)
                           }
                           className="cursor-pointer size-6 flex items-center justify-center rounded-[4px] bg-white text-slate-600 hover:bg-slate-100"
+                          title="Нэмэх"
                         >
                           <Plus className="size-3" />
                         </button>
